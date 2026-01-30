@@ -331,7 +331,7 @@ const Sidebar = ({
             style={{ width:'100%', padding:'8px', borderRadius:'6px', border:'1px solid #ccc' }}
           >
             <option value="">-- Seleccione un bloque --</option>
-            {/* ✅ AQUÍ ESTÁ LA CORRECCIÓN VISUAL QUE PEDISTE */}
+            
             {bloques.map(b => (
               <option key={b.codigo} value={b.codigo}>
                 {b.nombre} ({b.codigo})
