@@ -38,6 +38,7 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
         'typename': 'otavalo_cementerio:cementerio_general', 'outputFormat': 'application/json',
         'srsName': 'EPSG:4326', 'maxFeatures': '1'
       });
+      // USANDO CONSTANTE
       const respuesta = await fetch(`http://localhost:8080/geoserver/otavalo_cementerio/ows?${params.toString()}`);
       if (!respuesta.ok) throw new Error(`Error ${respuesta.status}`);
       const datosGeoJSON = await respuesta.json();
@@ -47,6 +48,84 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
       if (features.length > 0) return features[0].getGeometry()?.getExtent();
     } catch (e) { /* ignore */ }
     return null;
+  };
+
+  // --- FUNCIÓN AUXILIAR DE DATOS (REUTILIZABLE) ---
+  const obtenerDatosCompletoNicho = async (props) => {
+    const datosFinales = { ...props };
+    let bloqueEncontrado = false;
+
+    // 1. HEURÍSTICA: Deducir bloque por código (ej: B1-...)
+    if (props.codigo) {
+      const matchCodigo = props.codigo.match(/^B(\d+)-/i);
+      if (matchCodigo && matchCodigo[1]) {
+        const numeroBloque = matchCodigo[1];
+        const codigoBloqueBuscado = `B-${numeroBloque.padStart(2, '0')}`;
+
+        const { data: bGeom } = await supabase
+          .from('bloques_geom')
+          .select('nombre, sector')
+          .eq('codigo', codigoBloqueBuscado)
+          .maybeSingle();
+
+        if (bGeom) {
+          datosFinales.bloque = bGeom.nombre;
+          datosFinales.sector = bGeom.sector;
+          bloqueEncontrado = true;
+        }
+      }
+    }
+
+    // 2. FALLBACK: Admin Table Link
+    if (!bloqueEncontrado && props.codigo) {
+      const { data: dbNicho } = await supabase
+        .from('nichos')
+        .select('bloques(nombre, bloques_geom(sector))')
+        .eq('codigo', props.codigo)
+        .maybeSingle();
+
+      if (dbNicho && dbNicho.bloques) {
+        datosFinales.bloque = dbNicho.bloques.nombre;
+        if (dbNicho.bloques.bloques_geom) {
+          datosFinales.sector = dbNicho.bloques.bloques_geom.sector;
+        }
+      }
+    }
+
+    // 3. ESTADO
+    if (props.codigo) {
+      const { data: estadoData } = await supabase
+        .from('nichos')
+        .select('estado')
+        .eq('codigo', props.codigo)
+        .maybeSingle();
+      if (estadoData) datosFinales.estado = estadoData.estado;
+    }
+
+    // 4. DIFUNTO Y RESPONSABLE
+    let datosDifuntoFinal = null;
+    if (props.codigo) {
+      const { data: nAdmin } = await supabase.from('nichos').select('id').eq('codigo', props.codigo).maybeSingle();
+      if (nAdmin) {
+        const { data: rel } = await supabase
+          .from('fallecido_nicho')
+          .select(`fallecidos (nombres, apellidos, fecha_defuncion, responsable)`)
+          .eq('nicho_id', nAdmin.id)
+          .maybeSingle();
+        if (rel) datosDifuntoFinal = rel;
+      }
+    }
+
+    if (datosDifuntoFinal?.fallecidos) {
+      datosFinales.difunto = {
+        nombre: `${datosDifuntoFinal.fallecidos.nombres} ${datosDifuntoFinal.fallecidos.apellidos}`,
+        responsable: datosDifuntoFinal.fallecidos.responsable
+      };
+    } else {
+      datosFinales.difunto = null;
+    }
+
+    return datosFinales;
   };
 
   // --- 1. INICIALIZACIÓN DEL MAPA ---
@@ -69,19 +148,19 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
       const extentCementerio = await obtenerExtentCementerio();
 
       const capaCementerio = new TileLayer({
-        source: new TileWMS({ url: 'http://localhost:8080/geoserver/wms', params: { 'LAYERS': 'otavalo_cementerio:cementerio_general', 'TILED': true, 'TRANSPARENT': true }, serverType: 'geoserver' }),
+        source: new TileWMS({ url: `http://localhost:8080/geoserver/wms`, params: { 'LAYERS': 'otavalo_cementerio:cementerio_general', 'TILED': true, 'TRANSPARENT': true }, serverType: 'geoserver' }),
         zIndex: 1, visible: true
       });
       const capaInfraestructura = new TileLayer({
-        source: new TileWMS({ url: 'http://localhost:8080/geoserver/wms', params: { 'LAYERS': 'otavalo_cementerio:infraestructura', 'TILED': true, 'TRANSPARENT': true }, serverType: 'geoserver' }),
+        source: new TileWMS({ url: `http://localhost:8080/geoserver/wms`, params: { 'LAYERS': 'otavalo_cementerio:infraestructura', 'TILED': true, 'TRANSPARENT': true }, serverType: 'geoserver' }),
         zIndex: 2, visible: true
       });
       const capaBloques = new TileLayer({
-        source: new TileWMS({ url: 'http://localhost:8080/geoserver/wms', params: { 'LAYERS': 'otavalo_cementerio:bloques_geom', 'TILED': true, 'TRANSPARENT': true }, serverType: 'geoserver' }),
+        source: new TileWMS({ url: `http://localhost:8080/geoserver/wms`, params: { 'LAYERS': 'otavalo_cementerio:bloques_geom', 'TILED': true, 'TRANSPARENT': true }, serverType: 'geoserver' }),
         zIndex: 3, visible: true
       });
       const capaNichos = new TileLayer({
-        source: new TileWMS({ url: 'http://localhost:8080/geoserver/wms', params: { 'LAYERS': 'otavalo_cementerio:nichos_geom', 'TILED': true, 'TRANSPARENT': true }, serverType: 'geoserver' }),
+        source: new TileWMS({ url: `http://localhost:8080/geoserver/wms`, params: { 'LAYERS': 'otavalo_cementerio:nichos_geom', 'TILED': true, 'TRANSPARENT': true }, serverType: 'geoserver' }),
         zIndex: 4, visible: true
       });
 
@@ -123,7 +202,7 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
         nuevoMapa.getView().fit(extentCementerio, { padding: [50, 50, 50, 50], maxZoom: 19 });
       }
 
-      // === LOGICA DE DATOS CON "HEURÍSTICA DE CÓDIGO B-XX" ===
+      // === LOGICA CLICK ===
       nuevoMapa.on('singleclick', async (evt) => {
         // Limpiar para UX
         setDatosPopup(null);
@@ -146,79 +225,8 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
 
               const props = data.features[0].properties;
 
-              const datosFinales = { ...props };
-
-              let bloqueEncontrado = false;
-
-              if (props.codigo) {
-                const matchCodigo = props.codigo.match(/^B(\d+)-/i);
-                if (matchCodigo && matchCodigo[1]) {
-                  const numeroBloque = matchCodigo[1];
-                  // Formatear B-XX
-                  const codigoBloqueBuscado = `B-${numeroBloque.padStart(2, '0')}`;
-
-                  const { data: bGeom } = await supabase
-                    .from('bloques_geom')
-                    .select('nombre, sector')
-                    .eq('codigo', codigoBloqueBuscado)
-                    .maybeSingle();
-
-                  if (bGeom) {
-                    datosFinales.bloque = bGeom.nombre;
-                    datosFinales.sector = bGeom.sector;
-                    bloqueEncontrado = true;
-                  }
-                }
-              }
-
-              // Fallback admin
-              if (!bloqueEncontrado && props.codigo) {
-                const { data: dbNicho } = await supabase
-                  .from('nichos')
-                  .select('bloques(nombre, bloques_geom(sector))')
-                  .eq('codigo', props.codigo)
-                  .maybeSingle();
-
-                if (dbNicho && dbNicho.bloques) {
-                  datosFinales.bloque = dbNicho.bloques.nombre;
-                  if (dbNicho.bloques.bloques_geom) {
-                    datosFinales.sector = dbNicho.bloques.bloques_geom.sector;
-                  }
-                }
-              }
-
-              // Estado real
-              if (props.codigo) {
-                const { data: estadoData } = await supabase
-                  .from('nichos')
-                  .select('estado')
-                  .eq('codigo', props.codigo)
-                  .maybeSingle();
-                if (estadoData) datosFinales.estado = estadoData.estado;
-              }
-
-              // Difunto
-              let datosDifuntoFinal = null;
-              if (props.codigo) {
-                const { data: nAdmin } = await supabase.from('nichos').select('id').eq('codigo', props.codigo).maybeSingle();
-                if (nAdmin) {
-                  const { data: rel } = await supabase
-                    .from('fallecido_nicho')
-                    .select(`fallecidos (nombres, apellidos, fecha_defuncion, responsable)`)
-                    .eq('nicho_id', nAdmin.id)
-                    .maybeSingle();
-                  if (rel) datosDifuntoFinal = rel;
-                }
-              }
-
-              if (datosDifuntoFinal?.fallecidos) {
-                datosFinales.difunto = {
-                  nombre: `${datosDifuntoFinal.fallecidos.nombres} ${datosDifuntoFinal.fallecidos.apellidos}`,
-                  responsable: datosDifuntoFinal.fallecidos.responsable
-                };
-              } else {
-                datosFinales.difunto = null;
-              }
+              // LLAMADA A FUNCION CENTRALIZADA
+              const datosFinales = await obtenerDatosCompletoNicho(props);
 
               setDatosPopup(datosFinales);
               if (overlayRef.current) overlayRef.current.setPosition(evt.coordinate);
@@ -263,22 +271,45 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
   useEffect(() => {
     if (!inicializado || !mapaRef.current || !nichoSeleccionado) return;
 
-    // LIMPIAR POPUP AL BUSCAR
+    // Aquí NO reseteamos datosPopup inmediatamente si queremos mostrarlo tras el zoom
+    // Pero si es una nueva búsqueda, sí deberíamos limpiar lo anterior.
     setDatosPopup(null);
     if (overlayRef.current) overlayRef.current.setPosition(undefined);
 
     const doZoom = async () => {
+      // USANDO CONSTANTE
       const url = `http://localhost:8080/geoserver/wfs?service=WFS&version=1.1.0&request=GetFeature&typeName=otavalo_cementerio:nichos_geom&outputFormat=application/json&CQL_FILTER=codigo='${nichoSeleccionado}'`;
       try {
         const r = await fetch(url); const d = await r.json();
+
         if (d.features?.length) {
           const f = new GeoJSON().readFeatures(d, { featureProjection: 'EPSG:3857' });
-          capaResaltadoRef.current.clear(); capaResaltadoRef.current.addFeatures(f);
-          mapaRef.current.getView().fit(f[0].getGeometry().getExtent(), { duration: 1000, maxZoom: 21, padding: [100, 100, 100, 100] });
+          const feature = f[0];
+          const geometry = feature.getGeometry();
+          const extent = geometry.getExtent();
+
+          capaResaltadoRef.current.clear();
+          capaResaltadoRef.current.addFeatures(f);
+
+          mapaRef.current.getView().fit(extent, { duration: 1000, maxZoom: 21, padding: [100, 100, 100, 100] });
           setNotificacion({ tipo: 'exito', codigo: nichoSeleccionado });
-        } else { setNotificacion({ tipo: 'error', codigo: nichoSeleccionado }); }
+
+          // --- MOSTRAR POPUP AUTOMÁTICAMENTE ---
+          const props = feature.getProperties(); // Propiedades del GeoJSON
+          // Necesitamos asegurarnos de tener los datos completos (bloque, difunto)
+          const datosCompletos = await obtenerDatosCompletoNicho(props);
+
+          setDatosPopup(datosCompletos);
+
+          // Calcular centro para el popup
+          const center = [(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2];
+          if (overlayRef.current) overlayRef.current.setPosition(center);
+
+        } else {
+          setNotificacion({ tipo: 'error', codigo: nichoSeleccionado });
+        }
         setTimeout(() => setNotificacion(null), 5000);
-      } catch (e) { }
+      } catch (e) { console.error(e); }
     };
     doZoom();
   }, [nichoSeleccionado, inicializado]);
@@ -300,6 +331,7 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
     if (overlayRef.current) overlayRef.current.setPosition(undefined);
 
     const doZoomB = async () => {
+      // USANDO CONSTANTE
       const url = `http://localhost:8080/geoserver/wfs?service=WFS&version=1.1.0&request=GetFeature&typeName=otavalo_cementerio:bloques_geom&outputFormat=application/json&CQL_FILTER=codigo='${bloqueSeleccionado.codigo}'`;
       try {
         const r = await fetch(url); const d = await r.json();
