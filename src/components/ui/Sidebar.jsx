@@ -371,6 +371,10 @@ const Sidebar = ({
 
       doc.save(`Reporte_${sectorSeleccionado.replace(/\s+/g, '_')}.pdf`);
 
+      // Resetear selección para que regrese a "seleccione sector"
+      setSectorSeleccionado('');
+      setBloquesSeleccionados([]);
+
     } catch (e) {
       console.error(e);
       alert('Error generando reporte. Revise la consola.');
