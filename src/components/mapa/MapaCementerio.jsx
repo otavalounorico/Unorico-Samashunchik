@@ -6,7 +6,7 @@ import { GeoJSON } from 'ol/format';
 import { fromLonLat } from 'ol/proj';
 import './MapaCementerio.css';
 
-const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEstado, estadosVisibles }) => {
+const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEstado, estadosVisibles, alDeseleccionarNicho }) => {
 
   // 1. REFS Y ESTADOS
   const mapElement = useRef(null);
@@ -126,6 +126,14 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
     }
 
     return datosFinales;
+  };
+
+  const cerrarNichoPopup = () => {
+    setDatosPopup(null);
+    if (overlayRef.current) overlayRef.current.setPosition(undefined);
+    if (capaResaltadoRef.current) capaResaltadoRef.current.clear();
+    // Notificar al padre para limpiar el estado global de búsqueda
+    if (alDeseleccionarNicho) alDeseleccionarNicho();
   };
 
   // --- 1. INICIALIZACIÓN DEL MAPA ---
@@ -362,7 +370,7 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
         <div className="popup-header">
           <span className="popup-icon">📍</span>
           <h4 className="popup-title">Nicho {datosPopup?.codigo || '-'}</h4>
-          <button onClick={() => { if (popupRef.current) popupRef.current.style.display = 'none'; setDatosPopup(null); capaResaltadoRef.current?.clear(); if (overlayRef.current) overlayRef.current.setPosition(undefined); }} className="popup-close">×</button>
+          <button onClick={cerrarNichoPopup} className="popup-close">×</button>
         </div>
 
         {datosPopup && (
