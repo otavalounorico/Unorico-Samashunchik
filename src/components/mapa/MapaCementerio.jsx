@@ -109,7 +109,7 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
       if (nAdmin) {
         const { data: rel } = await supabase
           .from('fallecido_nicho')
-          .select(`fallecidos (nombres, apellidos, fecha_defuncion, responsable)`)
+          .select(`fallecidos (nombres, apellidos, fecha_fallecimiento)`)
           .eq('nicho_id', nAdmin.id)
           .maybeSingle();
         if (rel) datosDifuntoFinal = rel;
@@ -119,7 +119,7 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
     if (datosDifuntoFinal?.fallecidos) {
       datosFinales.difunto = {
         nombre: `${datosDifuntoFinal.fallecidos.nombres} ${datosDifuntoFinal.fallecidos.apellidos}`,
-        responsable: datosDifuntoFinal.fallecidos.responsable
+        responsable: 'No definido' // La tabla fallecidos no tiene columna responsable
       };
     } else {
       datosFinales.difunto = null;
@@ -269,20 +269,27 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
 
   // ZOOM Y LIMPIEZA
   useEffect(() => {
-    if (!inicializado || !mapaRef.current || !nichoSeleccionado) return;
+    const nichoCodigo = nichoSeleccionado?.codigo;
+    if (!inicializado || !mapaRef.current || !nichoCodigo) return;
 
-    // Aquí NO reseteamos datosPopup inmediatamente si queremos mostrarlo tras el zoom
-    // Pero si es una nueva búsqueda, sí deberíamos limpiar lo anterior.
+    console.log(`---- ZOOM EVENTO ----`);
+    console.log(`Nicho a buscar: ${nichoCodigo}`);
+
+    // Limpiamos popup previo
     setDatosPopup(null);
     if (overlayRef.current) overlayRef.current.setPosition(undefined);
 
     const doZoom = async () => {
       // USANDO CONSTANTE
-      const url = `http://localhost:8080/geoserver/wfs?service=WFS&version=1.1.0&request=GetFeature&typeName=otavalo_cementerio:nichos_geom&outputFormat=application/json&CQL_FILTER=codigo='${nichoSeleccionado}'`;
+      const url = `http://localhost:8080/geoserver/wfs?service=WFS&version=1.1.0&request=GetFeature&typeName=otavalo_cementerio:nichos_geom&outputFormat=application/json&CQL_FILTER=codigo='${nichoCodigo}'`;
+
       try {
-        const r = await fetch(url); const d = await r.json();
+        console.log(`Fetching GeoServer: ${url}`);
+        const r = await fetch(url);
+        const d = await r.json();
 
         if (d.features?.length) {
+          console.log(`Feature encontrada en GeoServer!`);
           const f = new GeoJSON().readFeatures(d, { featureProjection: 'EPSG:3857' });
           const feature = f[0];
           const geometry = feature.getGeometry();
@@ -292,27 +299,24 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
           capaResaltadoRef.current.addFeatures(f);
 
           mapaRef.current.getView().fit(extent, { duration: 1000, maxZoom: 21, padding: [100, 100, 100, 100] });
-          setNotificacion({ tipo: 'exito', codigo: nichoSeleccionado });
 
           // --- MOSTRAR POPUP AUTOMÁTICAMENTE ---
-          const props = feature.getProperties(); // Propiedades del GeoJSON
-          // Necesitamos asegurarnos de tener los datos completos (bloque, difunto)
+          const props = feature.getProperties();
           const datosCompletos = await obtenerDatosCompletoNicho(props);
-
           setDatosPopup(datosCompletos);
 
-          // Calcular centro para el popup
           const center = [(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2];
           if (overlayRef.current) overlayRef.current.setPosition(center);
 
         } else {
-          setNotificacion({ tipo: 'error', codigo: nichoSeleccionado });
+          console.warn(`Nicho ${nichoCodigo} no existe en Geoserver`);
         }
-        setTimeout(() => setNotificacion(null), 5000);
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error("Error en doZoom:", e);
+      }
     };
     doZoom();
-  }, [nichoSeleccionado, inicializado]);
+  }, [nichoSeleccionado?.ts, inicializado]);
 
   useEffect(() => {
     if (!inicializado || !mapaRef.current || !bloqueSeleccionado) {
@@ -349,12 +353,7 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
   return (
     <div className="mapa-cementerio-container">
       {etiquetaBloque && <div className="block-label"><span>📍</span><span>Bloque: {etiquetaBloque}</span></div>}
-      {notificacion && (
-        <div className={`map-notification ${notificacion.tipo === 'exito' ? 'notif-success' : 'notif-error'}`}>
-          <span style={{ fontSize: '20px' }}>{notificacion.tipo === 'exito' ? '✅' : '❌'}</span>
-          <span>{notificacion.tipo === 'exito' ? 'Nicho ubicado' : 'No encontrado'}</span>
-        </div>
-      )}
+
       {cargando && <div className="map-loader"><div className="spinner" /><p style={{ fontSize: '18px', fontWeight: '500' }}>Cargando mapa...</p></div>}
 
       <div ref={mapElement} className="mapa-cementerio-mapa" />

@@ -92,19 +92,29 @@ const Sidebar = ({
 
     setCargando(true);
 
-    // BÚSQUEDA DUAL: FALLECIDOS Y SOCIOS
-    const [resFallecidos, resSocios] = await Promise.all([
-      supabase
-        .from('fallecidos')
-        .select(`id, nombres, apellidos, cedula, fallecido_nicho ( nichos ( codigo ) )`)
-        .or(`nombres.ilike.%${texto}%,apellidos.ilike.%${texto}%,cedula.ilike.%${texto}%`)
-        .limit(5),
+    // BÚSQUEDA DUAL MEJORADA (Multitérmino)
+    const terminos = texto.split(' ').filter(t => t.trim().length > 0);
 
-      supabase
-        .from('socios')
-        .select(`id, nombres, apellidos, cedula, socio_nicho ( nichos ( codigo ) )`) // Asumimos tabla pivote socio_nicho
-        .or(`nombres.ilike.%${texto}%,apellidos.ilike.%${texto}%,cedula.ilike.%${texto}%`)
-        .limit(5)
+    let queryFallecidos = supabase
+      .from('fallecidos')
+      .select(`id, nombres, apellidos, cedula, fallecido_nicho ( nichos ( codigo ) )`);
+
+    let querySocios = supabase
+      .from('socios')
+      .select(`id, nombres, apellidos, cedula, socio_nicho ( nichos ( codigo ) )`);
+
+    // Para cada palabra escrita, exigimos que aparezca en (Nombre O Apellido O Cédula)
+    // Al encadenar .or(), Supabase hace AND entre los grupos.
+    // Ej: (Nombre tiene "Juan" O Apellido tiene "Juan") Y (Nombre tiene "Andrade" O Apellido tiene "Andrade")
+    terminos.forEach(term => {
+      const filtro = `nombres.ilike.%${term}%,apellidos.ilike.%${term}%,cedula.ilike.%${term}%`;
+      queryFallecidos = queryFallecidos.or(filtro);
+      querySocios = querySocios.or(filtro);
+    });
+
+    const [resFallecidos, resSocios] = await Promise.all([
+      queryFallecidos.limit(5),
+      querySocios.limit(5)
     ]);
 
     const hitsFallecidos = (resFallecidos.data || []).map(d => ({
@@ -123,14 +133,41 @@ const Sidebar = ({
       codigo: d.socio_nicho?.[0]?.nichos?.codigo || null
     }));
 
-    // Combinar y cortar a 5 resultados totales
-    const combinados = [...hitsFallecidos, ...hitsSocios].slice(0, 7);
+    // --- LÓGICA DE DEDUPLICACIÓN ---
+    // Si la misma persona está en Fallecidos y Socios, solo mostramos una vez
+    const mapaUnicos = new Map();
+
+    [...hitsFallecidos, ...hitsSocios].forEach(item => {
+      // Usamos la cédula como llave. Si no tiene cédula, usamos su ID generado
+      const llave = item.cedula || item.id;
+      if (!mapaUnicos.has(llave)) {
+        mapaUnicos.set(llave, item);
+      } else {
+        // Si ya existe, preferimos el que tenga un 'codigo' (nicho) asignado
+        const existente = mapaUnicos.get(llave);
+        if (!existente.codigo && item.codigo) {
+          mapaUnicos.set(llave, item);
+        }
+      }
+    });
+
+    const combinados = Array.from(mapaUnicos.values()).slice(0, 7);
 
     setResultados(combinados);
     setCargando(false);
 
+    // ERROR HANDLING AGREGADO
+    if (resFallecidos.error) {
+      console.error("Error buscando FALLECIDOS:", resFallecidos.error);
+      setMensajeBusqueda({ tipo: 'error', texto: 'Error buscando Difuntos (ver consola)' });
+      return;
+    }
+    if (resSocios.error) {
+      console.error("Error buscando SOCIOS:", resSocios.error);
+    }
+
     if (combinados.length === 0 && texto.length >= 3) {
-      setMensajeBusqueda({ tipo: 'error', texto: 'No se encontró coincidencia' });
+      setMensajeBusqueda({ tipo: 'error', texto: 'No se encontraron registros.' });
       setTimeout(() => setMensajeBusqueda(null), 3000);
     }
   };
@@ -138,8 +175,8 @@ const Sidebar = ({
   const seleccionarResultado = (item) => {
     if (item.codigo) {
       alBuscar(item.codigo); // <--- ESTO HACE ZOOM AL NICHO
-      setResultados([]);
-      setBusqueda(item.cedula);
+      setResultados([]); // Limpamos la lista
+      setBusqueda(''); // Limpiamos el texto (según deseo del usuario)
     } else {
       setMensajeBusqueda({ tipo: 'warning', texto: `${item.tipo} sin nicho asignado` });
       setTimeout(() => setMensajeBusqueda(null), 3000);
@@ -149,49 +186,79 @@ const Sidebar = ({
   const ubicarFallecido = async () => {
     if (busqueda.length < 3) return;
     setCargando(true);
+    setMensajeBusqueda(null);
 
-    // 1. Intentar buscar en FALLECIDOS por Cédula exacta
-    const { data: fData } = await supabase
-      .from('fallecidos')
-      .select(`id, fallecido_nicho ( nichos ( codigo ) )`)
-      .eq('cedula', busqueda)
-      .limit(1)
-      .maybeSingle();
+    // 1. Intentar buscar por Cédula EXACTA primero (Prioridad Alta)
+    // Buscamos en ambas tablas en paralelo para ser eficientes
+    const [resFExacta, resSExacta] = await Promise.all([
+      supabase.from('fallecidos').select(`id, fallecido_nicho ( nichos ( codigo ) )`).eq('cedula', busqueda).maybeSingle(),
+      supabase.from('socios').select(`id, socio_nicho ( nichos ( codigo ) )`).eq('cedula', busqueda).maybeSingle()
+    ]);
 
-    if (fData && fData.fallecido_nicho?.length > 0) {
-      const codigo = fData.fallecido_nicho[0].nichos?.codigo;
-      if (codigo) {
-        alBuscar(codigo);
-        setMensajeBusqueda({ tipo: 'exito', texto: 'Difunto ubicado' });
-        setCargando(false);
-        setTimeout(() => setMensajeBusqueda(null), 3000);
-        return;
-      }
+    // Si encontramos Match exacto de cédula en Fallecidos
+    if (resFExacta.data && resFExacta.data.fallecido_nicho?.length > 0) {
+      const codigo = resFExacta.data.fallecido_nicho[0].nichos?.codigo;
+      if (codigo) { navegarANicho(codigo, 'Difunto ubicado'); return; }
+    }
+    // Si encontramos Match exacto de cédula en Socios
+    if (resSExacta.data && resSExacta.data.socio_nicho?.length > 0) {
+      const codigo = resSExacta.data.socio_nicho[0].nichos?.codigo;
+      if (codigo) { navegarANicho(codigo, 'Socio ubicado'); return; }
     }
 
-    // 2. Si no, buscar en SOCIOS por Cédula exacta
-    const { data: sData } = await supabase
-      .from('socios')
-      .select(`id, socio_nicho ( nichos ( codigo ) )`)
-      .eq('cedula', busqueda)
-      .limit(1)
-      .maybeSingle();
+    // 2. Si NO es cédula exacta, buscamos por coincidencias de Nombre/Apellido (Lógica Smart)
+    // Reutilizamos la lógica "multitérmino" que hicimos para el dropdown
+    const terminos = busqueda.split(' ').filter(t => t.trim().length > 0);
 
-    if (sData && sData.socio_nicho?.length > 0) {
-      const codigo = sData.socio_nicho[0].nichos?.codigo;
-      if (codigo) {
-        alBuscar(codigo);
-        setMensajeBusqueda({ tipo: 'exito', texto: 'Socio ubicado' });
-        setCargando(false);
-        setTimeout(() => setMensajeBusqueda(null), 3000);
-        return;
-      }
+    let qF = supabase.from('fallecidos').select(`id, nombres, apellidos, fallecido_nicho ( nichos ( codigo ) )`);
+    let qS = supabase.from('socios').select(`id, nombres, apellidos, socio_nicho ( nichos ( codigo ) )`);
+
+    terminos.forEach(term => {
+      const filtro = `nombres.ilike.%${term}%,apellidos.ilike.%${term}%,cedula.ilike.%${term}%`;
+      qF = qF.or(filtro);
+      qS = qS.or(filtro);
+    });
+
+    const [rf, rs] = await Promise.all([qF.limit(5), qS.limit(5)]);
+
+    // DEBUG: Mostramos qué está encontrando exactamente la base de datos
+    console.log("---- DEBUG BUSQUEDA (Ubicar) ----");
+    console.log(`Buscando: "${busqueda}"`);
+    console.log("Resultados Fallecidos (Crudos):", rf.data);
+    console.log("Resultados Socios (Crudos):", rs.data);
+
+    // Contamos cuántos tienen nicho válido
+    const validosF = (rf.data || []).filter(d => d.fallecido_nicho?.length > 0);
+    const validosS = (rs.data || []).filter(d => d.socio_nicho?.length > 0);
+    const totalEncontrados = validosF.length + validosS.length;
+
+    console.log(`Total con nicho: ${totalEncontrados}`);
+
+
+    if (totalEncontrados === 1) {
+      // ÉXITO: Solo hay 1 coincidencia, vamos directo ahí
+      const unico = validosF[0] || validosS[0];
+      const nichoArr = unico.fallecido_nicho || unico.socio_nicho;
+      navegarANicho(nichoArr[0].nichos.codigo, 'Ubicación encontrada');
+    } else if (totalEncontrados > 1) {
+      // AMBIGÜEDAD: Hay varios
+      setMensajeBusqueda({ tipo: 'warning', texto: 'Múltiples resultados. Seleccione de la lista.' });
+      setTimeout(() => setMensajeBusqueda(null), 4000);
+    } else {
+      // Hmmm, nada de nada
+      setMensajeBusqueda({ tipo: 'error', texto: 'No se encontraron registros.' });
+      setTimeout(() => setMensajeBusqueda(null), 3000);
     }
 
-    // 3. Fallo total
-    setMensajeBusqueda({ tipo: 'error', texto: 'Cédula no encontrada o sin nicho' });
     setCargando(false);
-    setTimeout(() => setMensajeBusqueda(null), 3000);
+  };
+
+  const navegarANicho = (codigo) => {
+    alBuscar(codigo);
+    setCargando(false);
+    setResultados([]); // Limpiamos la lista al navegar
+    setBusqueda('');    // Limpiamos el input al navegar
+    setMensajeBusqueda(null); // Limpiamos cualquier error previo
   };
 
   // --- LÓGICA DE CAPAS ---
@@ -338,6 +405,7 @@ const Sidebar = ({
               placeholder="Ingrese cédula o nombre"
               value={busqueda}
               onChange={manejarBusqueda}
+              onKeyDown={(e) => e.key === 'Enter' && ubicarFallecido()}
               className="form-input"
             />
             <button onClick={ubicarFallecido} disabled={busqueda.length < 3} className="btn-primary">
@@ -346,11 +414,8 @@ const Sidebar = ({
           </div>
 
           {mensajeBusqueda && (
-            <div className={`alert-box ${mensajeBusqueda.tipo === 'error' ? 'alert-error' :
-              mensajeBusqueda.tipo === 'warning' ? 'alert-warning' : 'alert-success'
-              }`}>
-              {mensajeBusqueda.tipo === 'error' ? <AlertCircle size={14} /> :
-                mensajeBusqueda.tipo === 'warning' ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
+            <div className={`alert-box ${mensajeBusqueda.tipo === 'error' ? 'alert-error' : 'alert-warning'}`}>
+              {mensajeBusqueda.tipo === 'error' ? <AlertCircle size={14} /> : <AlertTriangle size={14} />}
               {mensajeBusqueda.texto}
             </div>
           )}
