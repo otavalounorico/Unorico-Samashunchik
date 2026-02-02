@@ -13,7 +13,7 @@ function App() {
     'nichos_geom': true
   });
 
-  const [estadosVisibles, setEstadosVisibles] = useState(['disponible', 'ocupado', 'reservado']);
+  const [estadosVisibles, setEstadosVisibles] = useState(['Disponible', 'Ocupado', 'Mantenimiento']);
   const [menuAbierto, setMenuAbierto] = useState(false);
 
   const listaCapas = [

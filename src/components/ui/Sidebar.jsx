@@ -22,6 +22,8 @@ const Sidebar = ({
   const [bloques, setBloques] = useState([]);
   const [bloqueActual, setBloqueActual] = useState('');
   const [generandoReporte, setGenerandoReporte] = useState(false);
+  const [buscarFallecidos, setBuscarFallecidos] = useState(true);
+  const [buscarSocios, setBuscarSocios] = useState(true);
 
   const [sectores, setSectores] = useState([]);
   const [sectorSeleccionado, setSectorSeleccionado] = useState('');
@@ -113,8 +115,8 @@ const Sidebar = ({
     });
 
     const [resFallecidos, resSocios] = await Promise.all([
-      queryFallecidos.limit(5),
-      querySocios.limit(5)
+      buscarFallecidos ? queryFallecidos.limit(5) : Promise.resolve({ data: [], error: null }),
+      buscarSocios ? querySocios.limit(5) : Promise.resolve({ data: [], error: null })
     ]);
 
     const hitsFallecidos = (resFallecidos.data || []).map(d => ({
@@ -175,12 +177,14 @@ const Sidebar = ({
   const seleccionarResultado = (item) => {
     if (item.codigo) {
       alBuscar(item.codigo); // <--- ESTO HACE ZOOM AL NICHO
-      setResultados([]); // Limpamos la lista
-      setBusqueda(''); // Limpiamos el texto (según deseo del usuario)
     } else {
       setMensajeBusqueda({ tipo: 'warning', texto: `${item.tipo} sin nicho asignado` });
       setTimeout(() => setMensajeBusqueda(null), 3000);
     }
+
+    // LIMPIAR SIEMPRE (según solicitud del usuario)
+    setResultados([]);
+    setBusqueda('');
   };
 
   const ubicarFallecido = async () => {
@@ -191,8 +195,8 @@ const Sidebar = ({
     // 1. Intentar buscar por Cédula EXACTA primero (Prioridad Alta)
     // Buscamos en ambas tablas en paralelo para ser eficientes
     const [resFExacta, resSExacta] = await Promise.all([
-      supabase.from('fallecidos').select(`id, fallecido_nicho ( nichos ( codigo ) )`).eq('cedula', busqueda).maybeSingle(),
-      supabase.from('socios').select(`id, socio_nicho ( nichos ( codigo ) )`).eq('cedula', busqueda).maybeSingle()
+      buscarFallecidos ? supabase.from('fallecidos').select(`id, fallecido_nicho ( nichos ( codigo ) )`).eq('cedula', busqueda).maybeSingle() : Promise.resolve({ data: null, error: null }),
+      buscarSocios ? supabase.from('socios').select(`id, socio_nicho ( nichos ( codigo ) )`).eq('cedula', busqueda).maybeSingle() : Promise.resolve({ data: null, error: null })
     ]);
 
     // Si encontramos Match exacto de cédula en Fallecidos
@@ -219,7 +223,10 @@ const Sidebar = ({
       qS = qS.or(filtro);
     });
 
-    const [rf, rs] = await Promise.all([qF.limit(5), qS.limit(5)]);
+    const [rf, rs] = await Promise.all([
+      buscarFallecidos ? qF.limit(5) : Promise.resolve({ data: [], error: null }),
+      buscarSocios ? qS.limit(5) : Promise.resolve({ data: [], error: null })
+    ]);
 
     // DEBUG: Mostramos qué está encontrando exactamente la base de datos
     console.log("---- DEBUG BUSQUEDA (Ubicar) ----");
@@ -362,7 +369,7 @@ const Sidebar = ({
         startY: doc.lastAutoTable.finalY + 20,
         head: [['Bloque', 'Total', 'Ocupados', 'Disponibles', 'Reservados']],
         body: detalles.map(d => [
-          `${d.nombre} (${d.codigo})`,
+          `(${d.codigo}) ${d.nombre}`,
           d.total, d.ocup, d.disp, d.resv
         ]),
         theme: 'grid',
@@ -390,7 +397,7 @@ const Sidebar = ({
         <div className="sidebar-title">
           <img src={logo} alt="Logo" className="sidebar-logo" />
           <div>
-            SAMASHUNCHIK
+            UNORICO SAMASHUNCHIK
             <p className="sidebar-subtitle">Otavalo - Ecuador</p>
           </div>
         </div>
@@ -400,8 +407,28 @@ const Sidebar = ({
 
         {/* BUSCADOR */}
         <section className="sidebar-section">
-          <h3 className="section-title">
-            <Search size={14} /> Búsqueda
+          <h3 className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Search size={14} /> Búsqueda
+            </div>
+            <div className="search-filters-header">
+              <label className="search-checkbox">
+                <input
+                  type="checkbox"
+                  checked={buscarFallecidos}
+                  onChange={(e) => setBuscarFallecidos(e.target.checked)}
+                />
+                <span>Difuntos</span>
+              </label>
+              <label className="search-checkbox">
+                <input
+                  type="checkbox"
+                  checked={buscarSocios}
+                  onChange={(e) => setBuscarSocios(e.target.checked)}
+                />
+                <span>Socios</span>
+              </label>
+            </div>
           </h3>
           <div className="input-group">
             <input
@@ -454,7 +481,7 @@ const Sidebar = ({
             <option value="">-- Seleccione un bloque --</option>
             {bloques.map(b => (
               <option key={b.codigo} value={b.codigo}>
-                {b.nombre} ({b.codigo})
+                ({b.codigo}) {b.nombre}
               </option>
             ))}
           </select>
@@ -497,7 +524,7 @@ const Sidebar = ({
                       if (e.target.checked) setBloquesSeleccionados([...bloquesSeleccionados, b.codigo]);
                       else setBloquesSeleccionados(bloquesSeleccionados.filter(x => x !== b.codigo));
                     }} />
-                  {b.nombre} ({b.codigo})
+                  ({b.codigo}) {b.nombre}
                 </label>
               ))}
             </div>
@@ -519,7 +546,7 @@ const Sidebar = ({
                 type="checkbox"
                 checked={estadosSeleccionados.includes('Disponible')}
                 onChange={() => toggleEstado('Disponible')}
-                className="hidden-checkbox" // Clase para ocultar
+                className="hidden-checkbox"
               />
               <div className="status-color-box" style={{
                 backgroundColor: estadosSeleccionados.includes('Disponible') ? '#22c55e' : 'transparent',
@@ -547,21 +574,21 @@ const Sidebar = ({
               <span className="status-text">Ocupado</span>
             </label>
 
-            {/* OPCIÓN: RESERVADO */}
-            <label className={`status-item ${estadosSeleccionados.includes('Reservado') ? 'active' : ''}`}>
+            {/* OPCIÓN: MANTENIMIENTO */}
+            <label className={`status-item ${estadosSeleccionados.includes('Mantenimiento') ? 'active' : ''}`}>
               <input
                 type="checkbox"
-                checked={estadosSeleccionados.includes('Reservado')}
-                onChange={() => toggleEstado('Reservado')}
+                checked={estadosSeleccionados.includes('Mantenimiento')}
+                onChange={() => toggleEstado('Mantenimiento')}
                 className="hidden-checkbox"
               />
               <div className="status-color-box" style={{
-                backgroundColor: estadosSeleccionados.includes('Reservado') ? '#eab308' : 'transparent',
-                borderColor: '#eab308'
+                backgroundColor: estadosSeleccionados.includes('Mantenimiento') ? '#fbbf24' : 'transparent',
+                borderColor: '#fbbf24'
               }}>
-                {estadosSeleccionados.includes('Reservado') && <Check size={12} color="white" strokeWidth={3} />}
+                {estadosSeleccionados.includes('Mantenimiento') && <Check size={12} color="white" strokeWidth={3} />}
               </div>
-              <span className="status-text">Reservado</span>
+              <span className="status-text">Mantenimiento</span>
             </label>
 
           </div>

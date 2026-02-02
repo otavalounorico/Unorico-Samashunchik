@@ -237,6 +237,11 @@
     background-color: #eab308;
 }
 
+.state-mantenimiento {
+    background-color: #fbbf24;
+    color: #422006 !important;
+}
+
 .state- {
     background-color: #94a3b8;
 }

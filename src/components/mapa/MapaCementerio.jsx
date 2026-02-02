@@ -270,8 +270,21 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, capasVisiblesEs
   useEffect(() => {
     if (!inicializado || !capasRef.current.nichos_geom) return;
     const src = capasRef.current.nichos_geom.getSource();
-    if (!estadosVisibles?.length) { src.updateParams({ 'CQL_FILTER': "1=0" }); return; }
-    const filtro = estadosVisibles.map(e => `'${e.toUpperCase()}'`).join(',');
+    // Si no hay ningún estado seleccionado, mostramos todos los nichos (según solicitud)
+    if (!estadosVisibles || estadosVisibles.length === 0) {
+      src.updateParams({ 'CQL_FILTER': undefined });
+      return;
+    }
+
+    // Mapeamos los estados de la UI a los valores que el GeoServer reconoce
+    // Si la UI pide 'Mantenimiento', buscamos 'MANTENIMIENTO' y 'RESERVADO'
+    const estadosParaFiltro = estadosVisibles.flatMap(e => {
+      const upper = e.toUpperCase();
+      if (upper === 'MANTENIMIENTO') return ['MANTENIMIENTO', 'RESERVADO'];
+      return [upper];
+    });
+
+    const filtro = [...new Set(estadosParaFiltro)].map(e => `'${e}'`).join(',');
     src.updateParams({ 'CQL_FILTER': `estado IN (${filtro})` });
   }, [estadosVisibles, inicializado]);
 
