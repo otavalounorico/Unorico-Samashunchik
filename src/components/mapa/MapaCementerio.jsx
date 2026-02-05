@@ -111,30 +111,34 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
       }
 
       if (nAdmin) {
-        // Buscamos la relación, priorizando el ocupante actual (sin fecha exhumación) y el registros más reciente
+        // Buscamos TODOS los ocupantes actuales (sin fecha exhumación)
         const { data: rel } = await supabase
           .from('fallecido_nicho')
           .select(`fallecidos (nombres, apellidos, fecha_fallecimiento), socios (nombres, apellidos)`)
           .eq('nicho_id', nAdmin.id)
           .is('fecha_exhumacion', null)
-          .order('created_at', { ascending: false })
-          .limit(1);
+          .order('created_at', { ascending: false });
 
-        if (rel && rel.length > 0) datosDifuntoFinal = rel[0];
+        if (rel && rel.length > 0) {
+          datosDifuntoFinal = rel; // Guardamos el array completo
+        }
       }
     }
 
-    if (datosDifuntoFinal?.fallecidos) {
-      const nombreResponsable = datosDifuntoFinal.socios
-        ? `${datosDifuntoFinal.socios.nombres} ${datosDifuntoFinal.socios.apellidos}`
-        : 'No definido';
+    // Procesamos la lista de difuntos
+    if (datosDifuntoFinal && Array.isArray(datosDifuntoFinal)) {
+      datosFinales.difuntos = datosDifuntoFinal.map(d => {
+        const nombreResponsable = d.socios
+          ? `${d.socios.nombres} ${d.socios.apellidos}`
+          : 'No definido';
 
-      datosFinales.difunto = {
-        nombre: `${datosDifuntoFinal.fallecidos.nombres} ${datosDifuntoFinal.fallecidos.apellidos}`,
-        responsable: nombreResponsable
-      };
+        return {
+          nombre: `${d.fallecidos.nombres} ${d.fallecidos.apellidos}`,
+          responsable: nombreResponsable
+        };
+      });
     } else {
-      datosFinales.difunto = null;
+      datosFinales.difuntos = [];
     }
 
     return datosFinales;
@@ -488,7 +492,37 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
               <span className={`state-badge state-${datosPopup.estado?.toLowerCase()}`}>{datosPopup.estado || 'DESCONOCIDO'}</span>
             </div>
             <div className="popup-grid"><div className="info-card"><span className="info-label">Bloque</span><span className="info-value">{datosPopup.bloque || 'N/A'}</span></div><div className="info-card"><span className="info-label">Sector</span><span className="info-value">{datosPopup.sector || 'N/A'}</span></div></div>
-            <div className="deceased-card"><h5 className="deceased-header">🕊️ INFORMACIÓN DEL DIFUNTO</h5><div className="deceased-info-group"><span className="deceased-label">Difunto</span><span className="deceased-value">{datosPopup.difunto?.nombre || 'N/A'}</span></div><div className="deceased-info-group"><span className="deceased-label">Responsable</span><span className="deceased-value">{datosPopup.difunto?.responsable || 'N/A'}</span></div></div>
+            <div className="deceased-card"><h5 className="deceased-header">🕊️ INFORMACIÓN {datosPopup.difuntos?.length > 1 ? 'DE LOS DIFUNTOS' : 'DEL DIFUNTO'}</h5>
+              {datosPopup.difuntos && datosPopup.difuntos.length > 0 ? (() => {
+                const responsables = [...new Set(datosPopup.difuntos.map(d => d.responsable))];
+                const mismoResponsable = responsables.length === 1;
+
+                return (
+                  <>
+                    {mismoResponsable && (
+                      <div className="deceased-info-group" style={{ marginBottom: '10px', borderBottom: '2px solid #ffebb0', paddingBottom: '8px' }}>
+                        <span className="deceased-label">Responsable (Titular)</span>
+                        <span className="deceased-value" style={{ fontWeight: 'bold' }}>{responsables[0]}</span>
+                      </div>
+                    )}
+
+                    {datosPopup.difuntos.map((d, i) => (
+                      <div key={i} className="deceased-item-group" style={{ marginBottom: '6px', borderBottom: '1px dashed #eee', paddingBottom: '4px' }}>
+                        <div className="deceased-info-group">
+                          <span className="deceased-label">Difunto</span>
+                          <span className="deceased-value">{d.nombre}</span>
+                        </div>
+                        {!mismoResponsable && (
+                          <div className="deceased-info-group"><span className="deceased-label">Responsable</span><span className="deceased-value">{d.responsable}</span></div>
+                        )}
+                      </div>
+                    ))}
+                  </>
+                );
+              })() : (
+                <div className="deceased-info-group"><span className="deceased-label">Difunto</span><span className="deceased-value">N/A</span></div>
+              )}
+            </div>
           </div>
         )}
       </div>
