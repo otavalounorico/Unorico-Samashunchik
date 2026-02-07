@@ -8,7 +8,7 @@ import './MapaCementerio.css';
 
 // --- CONFIGURACIÓN DEL SERVIDOR ---
 // Si reinicias el túnel, SOLO CAMBIA ESTA LÍNEA con el nuevo enlace:
-const GEOSERVER_URL = 'https://consumer-equity-fluid-reasonable.trycloudflare.com/geoserver';
+const GEOSERVER_URL = 'http://localhost:8080/geoserver/otavalo_cementerio/ows';
 
 const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccionado, capasVisiblesEstado, estadosVisibles, alDeseleccionarNicho }) => {
 
