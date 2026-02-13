@@ -383,47 +383,44 @@ const Sidebar = ({
         // - Total: nichos_geom (geometrías físicas)
         // - Ocupados/Mantenimiento: nichos (tabla administrativa)
 
-        // PASO 1: Obtener TOTAL usando la relación correcta bloques_geom_id
-        // Ya no dependemos del código (B1, B2) porque los IDs de bloques son variados (1, 17, 16...)
+        // PASO 1: Obtener CÓDIGOS de nichos_geom (Total Físico y Lista para cruce)
         let totalFisico = 0;
+        let codigosFisicos = [];
 
         if (bgId) {
-          const { count } = await supabase
+          const { data: geomData } = await supabase
             .from('nichos_geom')
-            .select('id', { count: 'exact', head: true })
+            .select('codigo')
             .eq('bloques_geom_id', bgId);
 
-          totalFisico = count || 0;
+          if (geomData) {
+            totalFisico = geomData.length;
+            codigosFisicos = geomData.map(n => n.codigo);
+          }
         }
 
-        // PASO 2: Buscar nichos administrativos
-        // La tabla nichos usa bloque_id -> bloques.id
-        // Y bloques tiene bloques_geom_id que apunta a bloques_geom.id
+        // PASO 2: Buscar estados en tabla administrativa usando los ID/CÓDIGOS
+        // Estrategia: Buscar en 'nichos' donde 'codigo' esté en la lista física
         let ocup = 0, mant = 0;
-        if (bgId) {
-          // Primero buscar el bloque administrativo que apunta a este bloques_geom_id
-          const { data: bloqueAdmin } = await supabase
-            .from('bloques')
-            .select('id')
-            .eq('bloques_geom_id', bgId)
-            .maybeSingle();
 
-          if (bloqueAdmin) {
-            const { data: nichosAdmin } = await supabase
-              .from('nichos')
-              .select('codigo, estado')
-              .eq('bloque_id', bloqueAdmin.id);
+        if (codigosFisicos.length > 0) {
+          // Dividir en chunks si son muchos (Supabase admite ~65k params, pero mejor ser prudentes)
+          // Para un bloque de ~100-200 nichos, una sola query está bien.
+          const { data: nichosAdmin } = await supabase
+            .from('nichos')
+            .select('codigo, estado')
+            .in('codigo', codigosFisicos);
 
-            if (nichosAdmin && nichosAdmin.length > 0) {
-              ocup = nichosAdmin.filter(n =>
-                n.estado?.toUpperCase() === 'OCUPADO' ||
-                n.estado?.toUpperCase().includes('OCUP')
-              ).length;
-              mant = nichosAdmin.filter(n =>
-                n.estado?.toUpperCase() === 'MANTENIMIENTO' ||
-                n.estado?.toUpperCase().includes('MANT')
-              ).length;
-            }
+          if (nichosAdmin && nichosAdmin.length > 0) {
+            ocup = nichosAdmin.filter(n =>
+              n.estado?.toUpperCase() === 'OCUPADO' ||
+              n.estado?.toUpperCase().includes('OCUP')
+            ).length;
+
+            mant = nichosAdmin.filter(n =>
+              n.estado?.toUpperCase() === 'MANTENIMIENTO' ||
+              n.estado?.toUpperCase().includes('MANT')
+            ).length;
           }
         }
 
