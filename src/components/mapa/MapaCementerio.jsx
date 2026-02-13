@@ -8,7 +8,7 @@ import './MapaCementerio.css';
 
 // --- CONFIGURACIÓN DEL SERVIDOR ---
 // Si reinicias el túnel, SOLO CAMBIA ESTA LÍNEA con el nuevo enlace:
-const GEOSERVER_URL = 'http://unorico.ddns.net:8080/geoserver/otavalo_cementerio';
+const GEOSERVER_URL = 'https://unorico.ddns.net/geoserver/otavalo_cementerio';
 
 const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccionado, capasVisiblesEstado, estadosVisibles, alDeseleccionarNicho }) => {
 
