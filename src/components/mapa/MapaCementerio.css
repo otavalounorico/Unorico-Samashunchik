@@ -329,3 +329,50 @@
     display: block;
     line-height: 1.2;
 }
+
+/* CONTROLES DE ROTACIÓN */
+.map-rotation-controls {
+    position: absolute;
+    top: 20px;
+    right: 60px;
+    /* A la izquierda de la brújula */
+    z-index: 1000;
+    display: flex;
+    gap: 8px;
+}
+
+.rotation-btn {
+    background: white;
+    border: 1px solid #cbd5e1;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    cursor: pointer;
+    font-size: 20px;
+    color: #475569;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    padding-bottom: 3px;
+}
+
+.rotation-btn:hover {
+    background: #f8fafc;
+    color: #1e293b;
+    transform: scale(1.1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+}
+
+.rotation-btn:active {
+    transform: scale(0.95);
+    background: #eff6ff;
+}
+
+.rotation-btn.active {
+    background: #e0e7ff;
+    color: #4338ca;
+    border-color: #6366f1;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+}

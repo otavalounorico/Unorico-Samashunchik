@@ -41,18 +41,27 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
 
   // --- FUNCIÓN AUXILIAR DE DATOS (REUTILIZABLE) ---
   const obtenerDatosCompletoNicho = async (props) => {
-    const datosFinales = { ...props };
+    // Normalizar código (Geoserver a veces devuelve CODIGO en mayúsculas)
+    let codigoRaw = props.codigo || props.CODIGO || props.Codigo;
+    if (codigoRaw && typeof codigoRaw === 'string') {
+      codigoRaw = codigoRaw.trim();
+    }
+
+    console.log("Obteniendo datos para:", codigoRaw);
+
+    const datosFinales = { ...props, codigo: codigoRaw }; // Aseguramos que 'codigo' exista en el objeto final
+
     let bloqueEncontrado = false;
 
     // 1. Primero intentar obtener datos ADMINISTRATIVOS (prioridad)
-    // Esto permite que si un nicho está asignado manualmente a otro bloque en la BD, se respete esa asignación
-    // sobre la geometría espacial.
-    if (props.codigo) {
-      const { data: dbNicho } = await supabase
+    if (codigoRaw) {
+      const { data: dbNicho, error: errDb } = await supabase
         .from('nichos')
         .select('bloques(nombre, codigo, bloques_geom(sector))')
-        .eq('codigo', props.codigo)
+        .eq('codigo', codigoRaw)
         .maybeSingle();
+
+      if (errDb) console.error("Error buscando nicho admin:", errDb);
 
       if (dbNicho && dbNicho.bloques) {
         datosFinales.bloque = `${dbNicho.bloques.nombre} (${dbNicho.bloques.codigo || 'S/C'})`;
@@ -63,19 +72,19 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
       }
     }
 
-    // 2. Si no se encontró administrativamente O si queremos complementar, buscamos geometría
-    // Pero si ya encontramos bloque (admin), NO sobrescribimos con geometría
-    if (props.codigo) {
-      const { data: nichoGeom } = await supabase
+    // 2. Geometría (Fallback de ubicación)
+    if (codigoRaw) {
+      const { data: nichoGeom, error: errGeom } = await supabase
         .from('nichos_geom')
-        .select('bloques_geom_id')
-        .eq('codigo', props.codigo)
+        .select('bloques_geom_id, estado') // Traemos estado de geom también por si acaso
+        .eq('codigo', codigoRaw)
         .maybeSingle();
 
-      if (nichoGeom && nichoGeom.bloques_geom_id) {
-        // Si ya tenemos bloque administrativo, ¿lo ignoramos? 
-        // Sí, la premisa es que lo administrativo corrige a lo espacial.
-        if (!bloqueEncontrado) {
+      if (errGeom) console.error("Error buscando nicho geom:", errGeom);
+
+      if (nichoGeom) {
+        // Si no encontramos bloque en admin, usamos geom
+        if (nichoGeom.bloques_geom_id && !bloqueEncontrado) {
           const { data: bGeom } = await supabase
             .from('bloques_geom')
             .select('nombre, sector, codigo')
@@ -88,38 +97,59 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
             bloqueEncontrado = true;
           }
         }
+        // Si no tenemos estado aun (porque no existia en props), usamos el de geom temporalmente
+        if (!datosFinales.estado && nichoGeom.estado) {
+          datosFinales.estado = nichoGeom.estado;
+        }
       }
     }
 
-    if (props.codigo) {
-      const { data: estadoData } = await supabase
+    // 3. Estado Administrativo (Sobrescribe geometria si existe)
+    if (codigoRaw) {
+      const { data: estadoData, error: errEst } = await supabase
         .from('nichos')
         .select('estado')
-        .eq('codigo', props.codigo)
+        .eq('codigo', codigoRaw)
         .maybeSingle();
-      if (estadoData) datosFinales.estado = estadoData.estado;
+
+      if (errEst) console.error("Error buscando estado admin:", errEst);
+
+      if (estadoData && estadoData.estado) {
+        datosFinales.estado = estadoData.estado;
+      }
     }
 
+    // 4. Difuntos
     let datosDifuntoFinal = null;
-    if (props.codigo) {
-      let { data: nAdmin } = await supabase.from('nichos').select('id').eq('codigo', props.codigo).maybeSingle();
+    if (codigoRaw) {
+      let { data: nAdmin, error: errN } = await supabase.from('nichos').select('id').eq('codigo', codigoRaw).maybeSingle();
+      if (errN) console.error("Error buscando ID nicho:", errN);
 
       if (!nAdmin) {
-        const { data: nLike } = await supabase.from('nichos').select('id').ilike('codigo', props.codigo).limit(1);
+        console.log("No encontrado exacto, probando ilike para:", codigoRaw);
+        const { data: nLike } = await supabase.from('nichos').select('id').ilike('codigo', codigoRaw).limit(1);
         if (nLike && nLike.length > 0) nAdmin = nLike[0];
       }
 
       if (nAdmin) {
-        const { data: rel } = await supabase
+        console.log("Nicho Admin ID encontrado:", nAdmin.id);
+        const { data: rel, error: errRel } = await supabase
           .from('fallecido_nicho')
           .select(`fallecidos (nombres, apellidos, fecha_fallecimiento), socios (nombres, apellidos)`)
           .eq('nicho_id', nAdmin.id)
           .is('fecha_exhumacion', null)
           .order('created_at', { ascending: false });
 
+        if (errRel) console.error("Error buscando difuntos:", errRel);
+
         if (rel && rel.length > 0) {
           datosDifuntoFinal = rel;
+          console.log("Difuntos encontrados:", rel.length);
+        } else {
+          console.log("Sin difuntos activos.");
         }
+      } else {
+        console.log("Nicho Admin NO encontrado para difuntos.");
       }
     }
 
@@ -136,6 +166,11 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
       });
     } else {
       datosFinales.difuntos = [];
+    }
+
+    // Asegurar que si estado es DISPONIBLE, se muestre así
+    if (!datosFinales.estado) {
+      datosFinales.estado = 'DESCONOCIDO';
     }
 
     return datosFinales;
@@ -272,42 +307,83 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
       // Ya estamos centrando manualmente en las coordenadas correctas.
 
       nuevoMapa.on('singleclick', async (evt) => {
+        console.log("--- CLICK EN MAPA ---");
         setDatosPopup(null);
         if (overlayRef.current) overlayRef.current.setPosition(undefined);
+
         const source = capasRef.current.nichos_geom?.getSource();
-        if (!source) return;
-        const url = source.getFeatureInfoUrl(evt.coordinate, nuevoMapa.getView().getResolution(), nuevoMapa.getView().getProjection(), { 'INFO_FORMAT': 'application/json', 'FEATURE_COUNT': 1 });
+        if (!source) {
+          console.warn("Source nichos_geom no disponible");
+          return;
+        }
+
+        const view = nuevoMapa.getView();
+        const url = source.getFeatureInfoUrl(
+          evt.coordinate,
+          view.getResolution(),
+          view.getProjection(),
+          { 'INFO_FORMAT': 'application/json', 'FEATURE_COUNT': 1 }
+        );
+
         if (url) {
+          console.log("URL WFS generada:", url);
           try {
-            // CORREGIDO: Aseguramos que GetFeatureInfo use el dominio correcto si OpenLayers genera localhost
-            // Reemplazamos el dominio base por si OpenLayers usa el de la capa
-            const urlSegura = url.replace(/http:\/\/localhost:8080\/geoserver/gi, GEOSERVER_URL);
+            // CORREGIDO: Evitar duplicar el path si ya es correcto
+            let urlSegura = url;
+
+            // Si la URL generada por OL ya empieza con nuestra GEOSERVER_URL, no hacemos nada.
+            // Esto evita el error de duplicar el workspace (otavalo_cementerio/otavalo_cementerio)
+            if (!url.startsWith(GEOSERVER_URL)) {
+              urlSegura = url.replace(/http:\/\/localhost:8080\/geoserver/gi, GEOSERVER_URL);
+            }
+
+            console.log("URL WFS segura:", urlSegura);
+
             const res = await fetch(urlSegura);
+            if (!res.ok) {
+              console.error("Error validando fetch:", res.status, res.statusText);
+              return;
+            }
+
             const data = await res.json();
+            console.log("Data recibida WFS:", data);
+
             if (data.features && data.features.length > 0) {
               const feature = new GeoJSON().readFeature(data.features[0]);
-              capaResaltadoRef.current.clear(); capaResaltadoRef.current.addFeature(feature);
+              capaResaltadoRef.current.clear();
+              capaResaltadoRef.current.addFeature(feature);
 
               const props = data.features[0].properties;
-              const datosFinales = await obtenerDatosCompletoNicho(props);
-              setDatosPopup(datosFinales);
-              if (overlayRef.current) overlayRef.current.setPosition(evt.coordinate);
+              console.log("Propiedades Feature:", props);
 
-              // AGREGADO: Zoom suave al hacer clic aka "poquito zoom"
-              const view = nuevoMapa.getView();
+              const datosFinales = await obtenerDatosCompletoNicho(props);
+              console.log("Datos Finales para Popup:", datosFinales);
+
+              setDatosPopup(datosFinales);
+              if (overlayRef.current) {
+                overlayRef.current.setPosition(evt.coordinate);
+                console.log("Popup posicionado en:", evt.coordinate);
+              }
+
+              // AGREGADO: Zoom suave
               const currentZoom = view.getZoom();
               if (currentZoom < 22) {
                 view.animate({
                   zoom: currentZoom + 1,
                   duration: 300,
-                  anchor: evt.coordinate // Mantiene el punto clicado fijo bajo el mouse
+                  anchor: evt.coordinate
                 });
               }
 
             } else {
+              console.log("No features found at click location");
               capaResaltadoRef.current.clear();
             }
-          } catch (e) { console.error(e); }
+          } catch (e) {
+            console.error("Error en singleclick:", e);
+          }
+        } else {
+          console.log("No se generó URL WFS");
         }
       });
 
@@ -343,45 +419,33 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
     if (!estadosVisibles || estadosVisibles.length === 0) return;
 
     const actualizarPintado = async () => {
+      // Limpiamos siempre al inicio
+      capaResaltadoEstadosRef.current.clear();
+
+      if (!mapaRef.current || !estadosVisibles.length) {
+        return;
+      }
+
+      const especificos = ['Estado_Bueno', 'Estado_Malo', 'Mantenimiento'];
+      const hayEspecificos = estadosVisibles.some(e => especificos.includes(e));
+      const verLibres = estadosVisibles.includes('Disponible');
+
+      // Si SOLO está 'Ocupado' y nada más, no mostramos nada aún (pedido del usuario)
+      if (estadosVisibles.length === 1 && estadosVisibles.includes('Ocupado')) {
+        return;
+      }
+
       try {
-        if (!estadosVisibles || estadosVisibles.length === 0) {
-          capaResaltadoEstadosRef.current.clear();
-          return;
-        }
+        let promesas = [];
 
-        const especificos = ['Estado_Bueno', 'Estado_Malo', 'Mantenimiento'];
-        const hayEspecificos = estadosVisibles.some(e => especificos.includes(e));
-        const verLibres = estadosVisibles.includes('Disponible');
-
-        // Si SOLO está 'Ocupado' y nada más, no mostramos nada aún (pedido del usuario)
-        if (estadosVisibles.length === 1 && estadosVisibles.includes('Ocupado')) {
-          capaResaltadoEstadosRef.current.clear();
-          return;
-        }
-
-        let filtrosOR = [];
-
-        // 1. Manejo de 'Libre' (Disponible) -> Usualmente nichos sin dueño
-        if (verLibres) {
-          filtrosOR.push(`socio_id.is.null`);
-        }
-
-        // 2. Manejo de estados físicos (Sub-filtros de Ocupado)
+        // 1. QUERY A TBL NICHOS (Para Ocupados y Mantenimiento)
         if (hayEspecificos) {
-          // Lógica aclarada: 
-          // Ocupado + Disponible(true) = Buenas
-          // Ocupado + Disponible(false) = Malas
+          let filtrosOR = [];
 
           if (estadosVisibles.includes('Estado_Bueno')) {
-            // "Buenas condiciones": ocupado AND disponible=true
-            // Supabase .or() filter column logic can be complex for AND across columns.
-            // We'll fetch all 'ocupado' and filter client-side if needed, 
-            // but let's try to be as specific as possible in the OR string if they allow complex expressions.
-            // Simplified: Fetch all and filter client side.
             filtrosOR.push(`estado.ilike.ocupado`);
           }
           if (estadosVisibles.includes('Estado_Malo')) {
-            // "Malas condiciones": ocupado AND disponible=false
             if (!filtrosOR.includes(`estado.ilike.ocupado`)) {
               filtrosOR.push(`estado.ilike.ocupado`);
             }
@@ -389,59 +453,75 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
           if (estadosVisibles.includes('Mantenimiento')) {
             filtrosOR.push(`estado.ilike.mantenimiento`);
           }
+
+          if (filtrosOR.length > 0) {
+            const queryOR = filtrosOR.join(',');
+            const pNichos = supabase
+              .from('nichos')
+              .select('codigo, estado, disponible, socio_id')
+              .or(queryOR)
+              .range(0, 2000);
+            promesas.push(pNichos);
+          } else {
+            promesas.push(Promise.resolve({ data: [] }));
+          }
+        } else {
+          promesas.push(Promise.resolve({ data: [] }));
         }
 
-        if (filtrosOR.length === 0) {
-          capaResaltadoEstadosRef.current.clear();
+        // 2. QUERY A TBL NICHOS_GEOM (Para Libres / Disponibles)
+        if (verLibres) {
+          const pLibres = supabase
+            .from('nichos_geom')
+            .select('codigo, estado')
+            .ilike('estado', 'DISPONIBLE')
+            .range(0, 5000);
+          promesas.push(pLibres);
+        } else {
+          promesas.push(Promise.resolve({ data: [] }));
+        }
+
+        const resultados = await Promise.all(promesas);
+        const resNichos = resultados[0]; // Admin
+        const resGeom = resultados[1];   // Geom
+
+        let listaFinal = [];
+
+        // Procesar Ocupados/Mantenimiento
+        if (resNichos.data) {
+          const filtradosAdmin = resNichos.data.filter(n => {
+            if (estadosVisibles.includes('Mantenimiento') && n.estado?.toLowerCase() === 'mantenimiento') return true;
+            if (estadosVisibles.includes('Estado_Bueno') &&
+              n.estado?.toLowerCase() === 'ocupado' && n.disponible === true) return true;
+            if (estadosVisibles.includes('Estado_Malo') &&
+              n.estado?.toLowerCase() === 'ocupado' && n.disponible === false) return true;
+            return false;
+          });
+          listaFinal = [...listaFinal, ...filtradosAdmin];
+        }
+
+        // Procesar Libres
+        if (resGeom.data) {
+          const libresFormateados = resGeom.data.map(g => ({
+            codigo: g.codigo,
+            estado: 'DISPONIBLE',
+            disponible: true,
+            socio_id: null
+          }));
+          listaFinal = [...listaFinal, ...libresFormateados];
+        }
+
+        if (listaFinal.length === 0) {
           return;
         }
 
-        const queryOR = filtrosOR.join(',');
+        const codigos = listaFinal.map(n => n.codigo);
+        // Deduplicar
+        const codigosUnicos = [...new Set(codigos)];
 
-        const { data: nichosDB, error } = await supabase
-          .from('nichos')
-          .select('codigo, estado, disponible, socio_id')
-          .or(queryOR)
-          .range(0, 2000);
-
-        if (error) {
-          console.error("Error consultando nichos:", error);
-          return;
-        }
-
-        if (!nichosDB || nichosDB.length === 0) {
-          capaResaltadoEstadosRef.current.clear();
-          return;
-        }
-
-        // FILTRADO CLIENT-SIDE para aplicar las reglas de AND (Buenas vs Malas)
-        const nichosFiltrados = nichosDB.filter(n => {
-          // Si pedimos Libres
-          if (verLibres && n.socio_id === null) return true;
-
-          // Si pedimos Mantenimiento
-          if (estadosVisibles.includes('Mantenimiento') && n.estado?.toLowerCase() === 'mantenimiento') return true;
-
-          // Si pedimos Ocupados - Buenas
-          if (estadosVisibles.includes('Estado_Bueno') &&
-            n.estado?.toLowerCase() === 'ocupado' && n.disponible === true) return true;
-
-          // Si pedimos Ocupados - Malas
-          if (estadosVisibles.includes('Estado_Malo') &&
-            n.estado?.toLowerCase() === 'ocupado' && n.disponible === false) return true;
-
-          return false;
-        });
-
-        if (nichosFiltrados.length === 0) {
-          capaResaltadoEstadosRef.current.clear();
-          return;
-        }
-
-        const codigos = nichosFiltrados.map(n => n.codigo);
         const CHUNK_SIZE = 50;
-        for (let i = 0; i < codigos.length; i += CHUNK_SIZE) {
-          const chunk = codigos.slice(i, i + CHUNK_SIZE);
+        for (let i = 0; i < codigosUnicos.length; i += CHUNK_SIZE) {
+          const chunk = codigosUnicos.slice(i, i + CHUNK_SIZE);
           const safeChunk = chunk.map(c => `'${c.replace(/'/g, "''")}'`);
           const filter = `codigo IN (${safeChunk.join(',')})`;
 
@@ -455,20 +535,22 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
             const features = new GeoJSON().readFeatures(data, { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
             features.forEach(f => {
               const codigoF = f.get('codigo') || f.get('CODIGO');
-              const d = nichosFiltrados.find(n => n.codigo === codigoF);
-              if (d) {
-                let colorKey = d.estado?.toLowerCase() || '';
+              const d = listaFinal.find(n => n.codigo === codigoF);
 
-                // Mapeo dinámico de color según las nuevas reglas
-                if (d.estado?.toLowerCase() === 'mantenimiento') {
-                  colorKey = 'mantenimiento'; // Prioridad: Mantenimiento (Amarillo)
-                } else if (d.socio_id === null) {
-                  colorKey = 'disponible'; // Libre (Verde)
+              if (d) {
+                let colorKey = '';
+                // Reglas estrictas
+                if (d.estado === 'DISPONIBLE') {
+                  colorKey = 'disponible';
+                } else if (d.estado?.toLowerCase() === 'mantenimiento') {
+                  colorKey = 'mantenimiento';
                 } else if (d.estado?.toLowerCase() === 'ocupado') {
-                  colorKey = d.disponible ? 'ocupado' : 'malas'; // Buenas (Rojo) vs Malas (Rojo oscuro)
+                  colorKey = d.disponible ? 'ocupado' : 'malas';
                 }
 
-                f.set('estado', colorKey);
+                if (colorKey) {
+                  f.set('estado', colorKey);
+                }
               }
             });
             capaResaltadoEstadosRef.current.addFeatures(features);

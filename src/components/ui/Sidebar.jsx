@@ -161,7 +161,9 @@ const Sidebar = ({
     if (sectorSeleccionado) {
       const bloquesFiltrados = bloques
         .filter(b => b.sector === sectorSeleccionado)
-        .filter(b => !b.nombre?.toLowerCase().includes('espacio verde') && !b.codigo?.toUpperCase().startsWith('EV'));
+        .filter(b => !b.nombre?.toLowerCase().includes('espacio verde') && !b.codigo?.toUpperCase().startsWith('EV'))
+        // Excluir Bloque 04 explícitamente
+        .filter(b => b.nombre !== 'Bloque 04' && b.codigo !== 'B-20');
       setBloquesDelSector(bloquesFiltrados);
       setBloquesSeleccionados([]);
     } else {
@@ -191,7 +193,7 @@ const Sidebar = ({
 
     let querySocios = supabase
       .from('socios')
-      .select(`id, nombres, apellidos, cedula, socio_nicho ( nichos ( codigo ) )`);
+      .select(`id, nombres, apellidos, cedula, socio_nicho ( nichos ( codigo, fallecido_nicho ( fallecidos ( nombres, apellidos ) ) ) )`);
 
     terminos.forEach(term => {
       const filtro = `nombres.ilike.%${term}%,apellidos.ilike.%${term}%,cedula.ilike.%${term}%`;
@@ -234,13 +236,22 @@ const Sidebar = ({
       if (nichos.length === 0) return [{
         id: `S-${d.id}`, tipo: 'Socio', nombre: `${d.nombres} ${d.apellidos}`, cedula: d.cedula, codigo: null
       }];
-      return nichos.map((n, i) => ({
-        id: `S-${d.id}-${i}`,
-        tipo: 'Socio',
-        nombre: `${d.nombres} ${d.apellidos} (${n.nichos?.codigo || '?'})`,
-        cedula: d.cedula,
-        codigo: n.nichos?.codigo
-      }));
+      return nichos.map((n, i) => {
+        // Obtener nombres de difuntos asociados a este nicho
+        const difuntos = n.nichos?.fallecido_nicho?.map(fn =>
+          fn.fallecidos ? `${fn.fallecidos.nombres} ${fn.fallecidos.apellidos}` : ''
+        ).filter(Boolean).join(', ');
+
+        const infoExtra = difuntos ? ` - Difunto(s): ${difuntos}` : '';
+
+        return {
+          id: `S-${d.id}-${i}`,
+          tipo: 'Socio',
+          nombre: `${d.nombres} ${d.apellidos}${infoExtra}`,
+          cedula: d.cedula,
+          codigo: n.nichos?.codigo
+        }
+      });
     });
 
     // Concatenar resultados (ya son exclusivos por los checkboxes o se suman si la lógica cambia)
@@ -364,7 +375,7 @@ const Sidebar = ({
         let nombreBloque = bloqueGeomItem?.nombre || cod;
 
         // FILTRO: Ocultar Espacio Verde del reporte (no tiene nichos)
-        if (nombreBloque.toLowerCase().includes('espacio verde') || cod.toUpperCase().startsWith('EV')) {
+        if (nombreBloque.toLowerCase().includes('espacio verde') || cod.toUpperCase().startsWith('EV') || nombreBloque === 'Bloque 04' || cod === 'B-20') {
           continue; // Saltar este bloque sin agregarlo al reporte
         }
 
