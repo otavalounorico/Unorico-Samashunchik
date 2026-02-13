@@ -460,7 +460,7 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
               .from('nichos')
               .select('codigo, estado, disponible, socio_id')
               .or(queryOR)
-              .range(0, 2000);
+              .range(0, 19999);
             promesas.push(pNichos);
           } else {
             promesas.push(Promise.resolve({ data: [] }));
@@ -475,7 +475,7 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
             .from('nichos_geom')
             .select('codigo, estado')
             .ilike('estado', 'DISPONIBLE')
-            .range(0, 5000);
+            .range(0, 19999);
           promesas.push(pLibres);
         } else {
           promesas.push(Promise.resolve({ data: [] }));
@@ -515,45 +515,97 @@ const MapaCementerio = ({ nichoSeleccionado, bloqueSeleccionado, sectorSeleccion
           return;
         }
 
-        const codigos = listaFinal.map(n => n.codigo);
-        // Deduplicar
-        const codigosUnicos = [...new Set(codigos)];
+        // SEPARAR CÓDIGOS PARA ESTRATEGIA HÍBRIDA
+        // 1. Libres/Disponibles -> Bulk Fetch
+        // 2. Ocupados/Mantenimiento -> Chunk Fetch
 
-        const CHUNK_SIZE = 50;
-        for (let i = 0; i < codigosUnicos.length; i += CHUNK_SIZE) {
-          const chunk = codigosUnicos.slice(i, i + CHUNK_SIZE);
-          const safeChunk = chunk.map(c => `'${c.replace(/'/g, "''")}'`);
-          const filter = `codigo IN (${safeChunk.join(',')})`;
+        const codigosLibres = listaFinal
+          .filter(n => n.estado === 'DISPONIBLE')
+          .map(n => n.codigo);
 
-          const url = `${GEOSERVER_URL}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=otavalo_cementerio:nichos_geom&outputFormat=application/json&CQL_FILTER=${encodeURIComponent(filter)}`;
+        const codigosResto = listaFinal
+          .filter(n => n.estado !== 'DISPONIBLE')
+          .map(n => n.codigo);
 
-          const res = await fetch(url);
-          if (!res.ok) continue;
+        const codigosRestoUnicos = [...new Set(codigosResto)];
 
-          const data = await res.json();
-          if (data.features) {
-            const features = new GeoJSON().readFeatures(data, { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
-            features.forEach(f => {
-              const codigoF = f.get('codigo') || f.get('CODIGO');
-              const d = listaFinal.find(n => n.codigo === codigoF);
-
-              if (d) {
-                let colorKey = '';
-                // Reglas estrictas
-                if (d.estado === 'DISPONIBLE') {
-                  colorKey = 'disponible';
-                } else if (d.estado?.toLowerCase() === 'mantenimiento') {
-                  colorKey = 'mantenimiento';
-                } else if (d.estado?.toLowerCase() === 'ocupado') {
-                  colorKey = d.disponible ? 'ocupado' : 'malas';
-                }
-
-                if (colorKey) {
-                  f.set('estado', colorKey);
-                }
+        const procesarFeatures = (features) => {
+          features.forEach(f => {
+            const codigoF = f.get('codigo') || f.get('CODIGO');
+            const d = listaFinal.find(n => n.codigo === codigoF);
+            if (d) {
+              let colorKey = '';
+              // Reglas estrictas
+              if (d.estado === 'DISPONIBLE') {
+                colorKey = 'disponible';
+              } else if (d.estado?.toLowerCase() === 'mantenimiento') {
+                colorKey = 'mantenimiento';
+              } else if (d.estado?.toLowerCase() === 'ocupado') {
+                colorKey = d.disponible ? 'ocupado' : 'malas';
               }
-            });
-            capaResaltadoEstadosRef.current.addFeatures(features);
+              if (colorKey) f.set('estado', colorKey);
+            }
+          });
+          capaResaltadoEstadosRef.current.addFeatures(features);
+        };
+
+        // ESTRATEGIA 1: BULK FETCH PARA DISPONIBLES
+        // Pedimos TODOS los disponibles de una vez usando CQL_FILTER=estado='DISPONIBLE'
+        // Esto es mucho más rápido que pedir miles de IDs
+        if (codigosLibres.length > 0) {
+          const urlBulk = `${GEOSERVER_URL}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=otavalo_cementerio:nichos_geom&outputFormat=application/json&CQL_FILTER=estado='DISPONIBLE'&maxFeatures=20000`;
+
+          fetch(urlBulk)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+              if (data?.features) {
+                const features = new GeoJSON().readFeatures(data, { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+                // ESTRATEGIA: Filtrar contra la lista de Ocupados/Mantenimiento (codigosResto)
+                // Si un nicho está en 'nichos_geom' como DISPONIBLE pero en 'nichos' como OCUPADO,
+                // GeoServer lo traerá aquí. Debemos evitar pintarlo verde para que luego se pinte rojo/amarillo.
+                const featuresVerdes = features.filter(f => {
+                  const c = f.get('codigo') || f.get('CODIGO');
+                  return !codigosResto.includes(c);
+                });
+
+                featuresVerdes.forEach(f => f.set('estado', 'disponible'));
+
+                capaResaltadoEstadosRef.current.addFeatures(featuresVerdes);
+              }
+            })
+            .catch(e => console.error("Error Bulk WFS:", e));
+        }
+
+        // ESTRATEGIA 2: CHUNK FETCH PARA EL RESTO (Ocupados, Mantenimiento)
+        if (codigosRestoUnicos.length > 0) {
+          const CHUNK_SIZE = 50;
+          const chunks = [];
+          for (let i = 0; i < codigosRestoUnicos.length; i += CHUNK_SIZE) {
+            chunks.push(codigosRestoUnicos.slice(i, i + CHUNK_SIZE));
+          }
+
+          const procesarChunk = async (chunk) => {
+            const safeChunk = chunk.map(c => `'${c.replace(/'/g, "''")}'`);
+            const filter = `codigo IN (${safeChunk.join(',')})`;
+            const url = `${GEOSERVER_URL}/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=otavalo_cementerio:nichos_geom&outputFormat=application/json&CQL_FILTER=${encodeURIComponent(filter)}`;
+
+            try {
+              const res = await fetch(url);
+              if (!res.ok) return;
+              const data = await res.json();
+              if (data.features) {
+                const features = new GeoJSON().readFeatures(data, { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' });
+                procesarFeatures(features); // Ya vienen filtrados por ID
+              }
+            } catch (e) {
+              console.error("Error fetch WFS chunk:", e);
+            }
+          };
+
+          const CONCURRENCY = 5;
+          for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+            const batch = chunks.slice(i, i + CONCURRENCY);
+            await Promise.all(batch.map(chunk => procesarChunk(chunk)));
           }
         }
       } catch (e) {
