@@ -75,6 +75,7 @@ function App() {
           capasVisiblesEstado={configuracionCapas}
           estadosVisibles={estadosVisibles}
           alDeseleccionarNicho={() => setNichoABuscar({ codigo: null, ts: Date.now() })}
+          alDeseleccionarBloque={() => setBloqueSeleccionado(null)}
         />
       </div>
     </div>

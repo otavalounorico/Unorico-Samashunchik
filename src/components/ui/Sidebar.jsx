@@ -172,6 +172,16 @@ const Sidebar = ({
     }
   }, [sectorSeleccionado, bloques]);
 
+  // Escuchar eventos externos de deselección (por ejemplo desde el mapa)
+  useEffect(() => {
+    const handler = () => {
+      setBloqueActual('');
+      setSectorFiltro('');
+    };
+    window.addEventListener('deseleccionarBloque', handler);
+    return () => window.removeEventListener('deseleccionarBloque', handler);
+  }, []);
+
   // --- FUNCIONES DEL BUSCADOR ---
   const manejarBusqueda = async (e) => {
     const texto = e.target.value;
@@ -587,13 +597,7 @@ const Sidebar = ({
               })
               .map(b => <option key={b.codigo} value={b.codigo}>({b.codigo}) {b.nombre}</option>)}
           </select>
-          {bloqueActual && (
-            <button onClick={() => {
-              setBloqueActual('');
-              setSectorFiltro('');
-              alSeleccionarBloque(null);
-            }} className="btn-ghost">✕ Quitar filtro</button>
-          )}
+          {/* Botón de quitar filtro removido intencionalmente */}
         </section>
 
         <section className="sidebar-section">
