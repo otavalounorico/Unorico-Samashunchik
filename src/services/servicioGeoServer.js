@@ -4,8 +4,8 @@
 
 // CONFIGURACIÓN
 // Si reinicias el túnel, SOLO CAMBIA ESTA LÍNEA con el nuevo enlace:
-//const GEOSERVER_BASE_URL = 'http://localhost:8080/geoserver/otavalo_cementerio';
-const GEOSERVER_BASE_URL = 'http://192.168.20.100:8080/geoserver/otavalo_cementerio';
+const GEOSERVER_BASE_URL = 'http://localhost:8080/geoserver/otavalo_cementerio';
+//const GEOSERVER_BASE_URL = 'http://192.168.20.100:8080/geoserver/otavalo_cementerio';
 
 export const getGeoServerUrl = () => GEOSERVER_BASE_URL;
 
