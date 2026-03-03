@@ -12,7 +12,7 @@ services:
     name: mi-geoserver
     env: docker
     dockerfilePath: ./geoserver/Dockerfile
-    plan: starter # Necesario para tener al menos 512MB de RAM, aunque lo óptimo sería "standard"
+    plan: standard # 2GB de RAM para GeoServer
     branch: main
     envVars:
       - key: GEOSERVER_ADMIN_PASSWORD
