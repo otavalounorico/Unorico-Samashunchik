@@ -4,6 +4,8 @@ import { supabase } from '../../api/supabaseClient';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import logo from '../../assets/logo.png';
+import encabezadoImg from '../../assets/encabezado.png';
+import piedepaginaImg from '../../assets/piepagina.png';
 import './Sidebar.css';
 
 const Sidebar = ({
@@ -466,10 +468,10 @@ const Sidebar = ({
 
           // 1. Encabezado
           try {
-            // Cargar imagen de encabezado (si existe en public/assets/img/)
-            docParams.addImage('/assets/img/encabezado.png', 'PNG', 0, 5, pageWidth, 30);
+            // Cargar imagen de encabezado (importada desde assets)
+            docParams.addImage(encabezadoImg, 'PNG', 0, 5, pageWidth, 30);
           } catch (e) {
-            // Fallback (por si no has puesto la imagen todavía)
+            // Fallback (por si falla la imagen)
             docParams.setFillColor(28, 42, 72); // #1c2a48
             docParams.rect(0, 5, pageWidth, 20, 'F');
             docParams.setTextColor(255);
@@ -504,7 +506,7 @@ const Sidebar = ({
 
           // Imagen Pie de página
           try {
-            docParams.addImage('/assets/img/piedepagina.png', 'PNG', 0, pageHeight - 15, pageWidth, 15);
+            docParams.addImage(piedepaginaImg, 'PNG', 0, pageHeight - 15, pageWidth, 15);
           } catch (e) { }
         }
       };
