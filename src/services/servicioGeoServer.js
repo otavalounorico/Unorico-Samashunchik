@@ -43,10 +43,11 @@ export const fetchWfsFeatures = async ({ typeName, cqlFilter, maxFeatures, outpu
     try {
         const params = new URLSearchParams({
             service: 'WFS',
-            version: '1.1.0',
+            version: '1.0.0', // Versión 1.0.0 es más compatible con GeoJSON (X,Y en lugar de Y,X)
             request: 'GetFeature',
             typeName: `otavalo_cementerio:${typeName}`,
             outputFormat: outputFormat,
+            srsName: 'EPSG:4326' // Forzamos el EPSG correcto
         });
 
         if (cqlFilter) params.append('CQL_FILTER', cqlFilter);
