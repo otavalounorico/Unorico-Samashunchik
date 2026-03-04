@@ -493,10 +493,20 @@ const Sidebar = ({
           docParams.text('Generado por: Sistema Unorico', marginLeft, footerY + 5);
           docParams.text(`Otavalo, ${fechaLarga}`, pageWidth - marginRight, footerY + 5, { align: 'right' });
 
-          // Imagen Pie de página (ahora abarca el texto de contacto porque ya viene en la imagen)
+          // Textos Contacto
+          docParams.setFontSize(8);
+          docParams.setFont('helvetica', 'bold');
+          docParams.text('06) 2-927-663', pageWidth / 2, footerY + 12, { align: 'center' });
+
+          docParams.setTextColor(0, 123, 255); // #007bff
+          docParams.text('unoricosamashunchik@gmail.com', pageWidth / 2, footerY + 16, { align: 'center' });
+
+          docParams.setTextColor(51, 51, 51);
+          docParams.text('Calle Las Almas y Bolívar', pageWidth / 2, footerY + 20, { align: 'center' });
+
+          // Imagen Pie de página (líneas moradas de diseño sin texto)
           try {
-            // Se dibuja un poco más arriba y con más altura para que el texto de la imagen se lea bien
-            docParams.addImage(piedepaginaImg, 'PNG', 0, footerY + 10, pageWidth, 28);
+            docParams.addImage(piedepaginaImg, 'PNG', 0, pageHeight - 15, pageWidth, 15);
           } catch (e) { }
         }
       };
