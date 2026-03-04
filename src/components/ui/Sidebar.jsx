@@ -445,26 +445,94 @@ const Sidebar = ({
         detalles.push({ nombre: nombreBloque, codigo: cod, total: totalFisico, ocup, disp, mant });
       }
 
-      const doc = new jsPDF();
-      const fecha = new Date().toLocaleDateString();
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
 
-      doc.setFillColor(99, 102, 241); doc.rect(0, 0, 210, 5, 'F');
-      try { doc.addImage(logo, 'PNG', 15, 10, 25, 25); } catch (e) { }
+      const fechaLarga = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+      const fechaCorta = new Date().toLocaleDateString('es-ES');
 
-      doc.setFontSize(16); doc.setTextColor(99, 102, 241); doc.setFont('helvetica', 'bold');
-      doc.text('UNORICO SAMASHUNCHIK', 105, 20, { align: 'center' });
+      // Márgenes en milímetros (1cm = 10mm)
+      const marginLeft = 15;
+      const marginRight = 15;
+      const marginTop = 50;
+      const marginBottom = 45;
 
-      doc.setFontSize(10); doc.setTextColor(100); doc.setFont('helvetica', 'normal');
-      doc.text('REPORTE DE OCUPACIÓN - CEMENTERIO', 105, 26, { align: 'center' });
-      doc.text(`Sector: ${sectorSeleccionado} | Fecha: ${fecha}`, 105, 32, { align: 'center' });
+      // --- FUNCIONES PARA ENCABEZADO Y PIE DE PÁGINA ---
+      const addHeaderFooter = (docParams) => {
+        const totalPages = docParams.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+          docParams.setPage(i);
 
-      doc.setDrawColor(200); doc.line(15, 38, 195, 38);
+          // 1. Encabezado
+          try {
+            // Cargar imagen de encabezado (si existe en public/assets/img/)
+            docParams.addImage('/assets/img/encabezado.png', 'PNG', 0, 5, pageWidth, 30);
+          } catch (e) {
+            // Fallback (por si no has puesto la imagen todavía)
+            docParams.setFillColor(28, 42, 72); // #1c2a48
+            docParams.rect(0, 5, pageWidth, 20, 'F');
+            docParams.setTextColor(255);
+            docParams.setFontSize(14);
+            docParams.text('UNORICO SAMASHUNCHIK', pageWidth / 2, 17, { align: 'center' });
+          }
 
-      let y = 50;
-      doc.setFontSize(12); doc.setTextColor(0); doc.setFont('helvetica', 'bold');
-      doc.text('Resumen Total', 15, y);
+          // 2. Pie de Página
+          const footerY = pageHeight - 42;
 
-      y += 8;
+          // Línea divisora
+          docParams.setDrawColor(204, 204, 204); // #ccc
+          docParams.line(marginLeft, footerY, pageWidth - marginRight, footerY);
+
+          // Textos Meta
+          docParams.setFontSize(8);
+          docParams.setTextColor(51, 51, 51); // #333
+          docParams.setFont('helvetica', 'normal');
+          docParams.text('Generado por: Sistema Unorico', marginLeft, footerY + 5);
+          docParams.text(`Otavalo, ${fechaLarga}`, pageWidth - marginRight, footerY + 5, { align: 'right' });
+
+          // Textos Contacto
+          docParams.setFontSize(8);
+          docParams.setFont('helvetica', 'bold');
+          docParams.text('06) 2-927-663', pageWidth / 2, footerY + 12, { align: 'center' });
+
+          docParams.setTextColor(0, 123, 255); // #007bff
+          docParams.text('unoricosamashunchik@gmail.com', pageWidth / 2, footerY + 16, { align: 'center' });
+
+          docParams.setTextColor(51, 51, 51);
+          docParams.text('Calle Las Almas y Bolívar', pageWidth / 2, footerY + 20, { align: 'center' });
+
+          // Imagen Pie de página
+          try {
+            docParams.addImage('/assets/img/piedepagina.png', 'PNG', 0, pageHeight - 15, pageWidth, 15);
+          } catch (e) { }
+        }
+      };
+
+      // --- CONTENIDO PRINCIPAL ---
+      let y = marginTop;
+
+      // Fecha Alineada a la Derecha
+      doc.setFontSize(10);
+      doc.setTextColor(51, 51, 51); // #333
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Otavalo, ${fechaLarga}`, pageWidth - marginRight, y, { align: 'right' });
+
+      y += 15;
+
+      // Titulo Principal UPPERCASE
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('REPORTE GENERAL DE OCUPACIÓN', pageWidth / 2, y, { align: 'center' });
+
+      y += 6;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Sector: ${sectorSeleccionado}`, pageWidth / 2, y, { align: 'center' });
+
+      y += 12;
+
+      // --- TABLA RESUMEN TOTAL ---
       autoTable(doc, {
         startY: y,
         head: [['Estado', 'Cantidad', 'Porcentaje']],
@@ -475,23 +543,63 @@ const Sidebar = ({
           ['TOTAL', tNichos, '100%']
         ],
         theme: 'grid',
-        headStyles: { fillColor: [99, 102, 241] }
+        headStyles: {
+          fillColor: [28, 42, 72], // #1c2a48
+          textColor: [255, 255, 255],
+          halign: 'center',
+          fontSize: 9
+        },
+        bodyStyles: {
+          textColor: [51, 51, 51],
+          halign: 'center',
+          fontSize: 9
+        },
+        alternateRowStyles: {
+          fillColor: [242, 242, 242] // #f2f2f2
+        },
+        margin: { left: marginLeft, right: marginRight, top: marginTop, bottom: marginBottom }
       });
 
-      doc.text('Detalle por Bloque', 15, doc.lastAutoTable.finalY + 15);
-
+      // --- TABLA DETALLE POR BLOQUE ---
       autoTable(doc, {
-        startY: doc.lastAutoTable.finalY + 20,
-        head: [['Bloque', 'Total', 'Ocupados', 'Disponibles', 'Mantenimiento']],
-        body: detalles.map(d => [
-          `(${d.codigo}) ${d.nombre}`,
-          d.total, d.ocup, d.disp, d.mant
+        startY: doc.lastAutoTable.finalY + 15,
+        head: [['#', 'Código Único', 'Nombre Bloque', 'T. Nichos', 'Ocupados', 'Disp.', 'Manten.', 'Fecha']],
+        body: detalles.map((d, index) => [
+          index + 1,
+          d.codigo,
+          d.nombre,
+          d.total,
+          d.ocup,
+          d.disp,
+          d.mant,
+          fechaCorta
         ]),
         theme: 'grid',
-        headStyles: { fillColor: [99, 102, 241] }
+        headStyles: {
+          fillColor: [28, 42, 72], // #1c2a48
+          textColor: [255, 255, 255],
+          halign: 'center',
+          fontSize: 8
+        },
+        bodyStyles: {
+          textColor: [51, 51, 51],
+          halign: 'center',
+          fontSize: 8
+        },
+        columnStyles: {
+          0: { fontStyle: 'bold', fillColor: [249, 249, 249], halign: 'center' }, // Índice
+          2: { halign: 'left' } // Nombre del bloque alineado a la izquierda (según formato de la Cédula/Nombre)
+        },
+        alternateRowStyles: {
+          fillColor: [242, 242, 242] // #f2f2f2
+        },
+        margin: { left: marginLeft, right: marginRight, top: marginTop, bottom: marginBottom }
       });
 
-      doc.save(`Reporte_${sectorSeleccionado.replace(/\s+/g, '_')}.pdf`);
+      // Agregamos el Header y el Footer a TODAS las páginas que se hayan generado
+      addHeaderFooter(doc);
+
+      doc.save(`Reporte_Ocupacion_${sectorSeleccionado.replace(/\s+/g, '_')}.pdf`);
       setSectorSeleccionado('');
       setBloquesSeleccionados([]);
     } catch (e) {
