@@ -899,7 +899,7 @@ const Sidebar = ({
               </div>
             )}
           </div>
-          {sectorSeleccionado && (
+          {sectorSeleccionado && !dropdownSectorReporteOpen && (
             <div className="blocks-list">
               <div className="block-actions">
                 <span>Bloques del sector</span>
