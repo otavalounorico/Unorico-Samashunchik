@@ -263,20 +263,27 @@ const Sidebar = ({
         id: `S-${d.id}`, tipo: 'Socio', nombre: `${d.nombres} ${d.apellidos}`, cedula: d.cedula, codigo: null
       }];
       return nichos.map((n, i) => {
-        // Obtener nombres de difuntos asociados a este nicho
-        const difuntos = n.nichos?.fallecido_nicho?.map(fn =>
-          fn.fallecidos ? `${fn.fallecidos.nombres} ${fn.fallecidos.apellidos}` : ''
-        ).filter(Boolean).join(', ');
+        // Armar lista estructurada de difuntos para el popup
+        const difuntosLista = (n.nichos?.fallecido_nicho || []).map(fn =>
+          fn.fallecidos ? {
+            nombre: `${fn.fallecidos.nombres} ${fn.fallecidos.apellidos}`,
+            responsable: `${d.nombres} ${d.apellidos}`
+          } : null
+        ).filter(Boolean);
 
-        const infoExtra = difuntos ? ` - Difunto(s): ${difuntos}` : '';
+        const infoExtra = difuntosLista.length > 0
+          ? ` - Difunto(s): ${difuntosLista.map(x => x.nombre).join(', ')}`
+          : '';
 
         return {
           id: `S-${d.id}-${i}`,
           tipo: 'Socio',
           nombre: `${d.nombres} ${d.apellidos}${infoExtra}`,
           cedula: d.cedula,
-          codigo: n.nichos?.codigo
-        }
+          codigo: n.nichos?.codigo,
+          responsable: `${d.nombres} ${d.apellidos}`,
+          difuntosLista
+        };
       });
     });
 
@@ -296,9 +303,13 @@ const Sidebar = ({
     if (item.codigo) {
       // Pasar datos pre-fetched al popup directamente
       if (alActualizarPopupExterno) {
-        const difuntos = item.tipo === 'Difunto'
-          ? [{ nombre: item.nombre, responsable: item.responsable || 'No definido' }]
-          : [];
+        let difuntos = [];
+        if (item.tipo === 'Difunto') {
+          difuntos = [{ nombre: item.nombre, responsable: item.responsable || 'No definido' }];
+        } else if (item.tipo === 'Socio') {
+          // Para socios: usar difuntosLista estructurada, con el socio como responsable
+          difuntos = (item.difuntosLista || []);
+        }
         alActualizarPopupExterno({ codigo: item.codigo, difuntos, _prefetched: true });
       }
       alBuscar(item.codigo);
