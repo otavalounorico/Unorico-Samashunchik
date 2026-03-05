@@ -69,13 +69,21 @@ export const getDifuntosByNichoCodigo = async (codigo) => {
 
     if (!nichoRow) return [];
 
-    // PASO 2: Obtener nombre del responsable (socio) por su ID
+    // PASO 2: Obtener nombre del responsable (socio) buscando en socio_nicho
     let responsableNombre = 'No definido';
-    if (nichoRow.socio_id) {
+
+    // Buscar en la tabla intermedia socio_nicho
+    const { data: snRows } = await supabase
+        .from('socio_nicho')
+        .select('socio_id')
+        .eq('nicho_id', nichoRow.id)
+        .limit(1);
+
+    if (snRows && snRows.length > 0 && snRows[0].socio_id) {
         const { data: socioRow } = await supabase
             .from('socios')
             .select('nombres, apellidos')
-            .eq('id', nichoRow.socio_id)
+            .eq('id', snRows[0].socio_id)
             .maybeSingle();
         if (socioRow) {
             responsableNombre = `${socioRow.nombres} ${socioRow.apellidos}`;
@@ -91,10 +99,12 @@ export const getDifuntosByNichoCodigo = async (codigo) => {
 
     if (errRel) {
         console.error("Error buscando fallecido_nicho:", errRel);
-        return [];
+        return { responsable: responsableNombre, difuntos: [] };
     }
 
-    if (!relRows || relRows.length === 0) return [];
+    if (!relRows || relRows.length === 0) {
+        return { responsable: responsableNombre, difuntos: [] };
+    }
 
     // PASO 4: Obtener datos de cada fallecido y su responsable específico
     const difuntos = [];
@@ -126,7 +136,7 @@ export const getDifuntosByNichoCodigo = async (codigo) => {
         }
     }
 
-    return difuntos;
+    return { responsable: responsableNombre, difuntos };
 };
 
 
@@ -179,9 +189,10 @@ export const obtenerDatosCompletoNicho = async (props) => {
         datosFinales.estado = estadoData.estado;
     }
 
-    // 4. Difuntos (ya vienen mapeados con { nombre, responsable })
-    const difuntosRaw = await getDifuntosByNichoCodigo(codigoRaw);
-    datosFinales.difuntos = difuntosRaw || [];
+    // 4. Difuntos y Responsable
+    const info = await getDifuntosByNichoCodigo(codigoRaw);
+    datosFinales.responsable = info?.responsable || 'No definido';
+    datosFinales.difuntos = info?.difuntos || [];
 
     // Default
     if (!datosFinales.estado) {

@@ -68,7 +68,7 @@ const NichePopup = ({ datos, onClose }) => {
                         <>
                             <div className="deceased-info-group" style={{ marginBottom: '10px', borderBottom: '2px solid #ffebb0', paddingBottom: '8px' }}>
                                 <span className="deceased-label">Responsable (Titular)</span>
-                                <span className="deceased-value" style={{ fontWeight: 'bold' }}>N/A</span>
+                                <span className="deceased-value" style={{ fontWeight: 'bold' }}>{datos.responsable || 'N/A'}</span>
                             </div>
                             <div className="deceased-list">
                                 <div className="deceased-label" style={{ marginBottom: '4px' }}>DIFUNTO/S</div>
