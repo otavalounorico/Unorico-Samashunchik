@@ -389,7 +389,7 @@ const Sidebar = ({
     setGenerandoReporte(true);
 
     try {
-      let tNichos = 0, tOcupados = 0, tDisponibles = 0, tMantenimiento = 0;
+      let tNichos = 0, tBueno = 0, tMalo = 0, tMantenimiento = 0, tAbandonado = 0, tDisponibles = 0;
       const detalles = [];
 
       for (const cod of bloquesSeleccionados) {
@@ -426,8 +426,6 @@ const Sidebar = ({
 
         // PASO 2: Buscar estados en tabla administrativa usando los ID/CÓDIGOS
         // Estrategia: Buscar en 'nichos' donde 'codigo' esté en la lista física
-        let ocup = 0, mant = 0;
-
         if (codigosFisicos.length > 0) {
           // Dividir en chunks si son muchos (evita error 414 URI Too Long en Supabase GET)
           let nichosAdmin = [];
@@ -446,27 +444,28 @@ const Sidebar = ({
           }
 
           if (nichosAdmin.length > 0) {
-            ocup = nichosAdmin.filter(n =>
-              n.estado?.toUpperCase() === 'OCUPADO' ||
-              n.estado?.toUpperCase().includes('OCUP')
-            ).length;
+            const bueno = nichosAdmin.filter(n => n.estado?.toUpperCase() === 'BUENO').length;
+            const malo = nichosAdmin.filter(n => n.estado?.toUpperCase() === 'MALO').length;
+            const mant = nichosAdmin.filter(n => n.estado?.toUpperCase() === 'MANTENIMIENTO').length;
+            const abandonado = nichosAdmin.filter(n => n.estado?.toUpperCase() === 'ABANDONADO').length;
 
-            mant = nichosAdmin.filter(n =>
-              n.estado?.toUpperCase() === 'MANTENIMIENTO' ||
-              n.estado?.toUpperCase().includes('MANT')
-            ).length;
+            const totalOcupados = bueno + malo + mant + abandonado;
+            const disp = totalFisico - totalOcupados;
+
+            tNichos += totalFisico;
+            tBueno += bueno;
+            tMalo += malo;
+            tMantenimiento += mant;
+            tAbandonado += abandonado;
+            tDisponibles += disp;
+
+            detalles.push({ nombre: nombreBloque, codigo: cod, total: totalFisico, bueno, malo, mant, abandonado, disp });
+          } else {
+            tNichos += totalFisico;
+            tDisponibles += totalFisico;
+            detalles.push({ nombre: nombreBloque, codigo: cod, total: totalFisico, bueno: 0, malo: 0, mant: 0, abandonado: 0, disp: totalFisico });
           }
         }
-
-        // DISPONIBLES = Total físico - Ocupados - Mantenimiento
-        const disp = totalFisico - ocup - mant;
-
-        tNichos += totalFisico;
-        tOcupados += ocup;
-        tDisponibles += disp;
-        tMantenimiento += mant;
-
-        detalles.push({ nombre: nombreBloque, codigo: cod, total: totalFisico, ocup, disp, mant });
       }
 
       const doc = new jsPDF('p', 'mm', 'a4');
@@ -559,16 +558,18 @@ const Sidebar = ({
       // --- TABLA RESUMEN TOTAL ---
       autoTable(doc, {
         startY: y,
-        head: [['Estado', 'Cantidad', 'Porcentaje']],
+        head: [['Estado Físico', 'Cantidad', 'Porcentaje']],
         body: [
-          ['Ocupados', tOcupados, tNichos > 0 ? ((tOcupados / tNichos) * 100).toFixed(1) + '%' : '0%'],
-          ['Disponibles', tDisponibles, tNichos > 0 ? ((tDisponibles / tNichos) * 100).toFixed(1) + '%' : '0%'],
+          ['Buenas condiciones', tBueno, tNichos > 0 ? ((tBueno / tNichos) * 100).toFixed(1) + '%' : '0%'],
+          ['Malas condiciones', tMalo, tNichos > 0 ? ((tMalo / tNichos) * 100).toFixed(1) + '%' : '0%'],
           ['Mantenimiento', tMantenimiento, tNichos > 0 ? ((tMantenimiento / tNichos) * 100).toFixed(1) + '%' : '0%'],
+          ['Abandonado', tAbandonado, tNichos > 0 ? ((tAbandonado / tNichos) * 100).toFixed(1) + '%' : '0%'],
+          ['Disponibles', tDisponibles, tNichos > 0 ? ((tDisponibles / tNichos) * 100).toFixed(1) + '%' : '0%'],
           ['TOTAL', tNichos, '100%']
         ],
         theme: 'grid',
         headStyles: {
-          fillColor: [28, 42, 72], // #1c2a48
+          fillColor: [28, 42, 72],
           textColor: [255, 255, 255],
           halign: 'center',
           fontSize: 9
@@ -579,7 +580,7 @@ const Sidebar = ({
           fontSize: 9
         },
         alternateRowStyles: {
-          fillColor: [242, 242, 242] // #f2f2f2
+          fillColor: [242, 242, 242]
         },
         margin: { left: marginLeft, right: marginRight, top: marginTop, bottom: marginBottom }
       });
@@ -587,35 +588,36 @@ const Sidebar = ({
       // --- TABLA DETALLE POR BLOQUE ---
       autoTable(doc, {
         startY: doc.lastAutoTable.finalY + 15,
-        head: [['#', 'Código Único', 'Nombre Bloque', 'T. Nichos', 'Ocupados', 'Disp.', 'Manten.', 'Fecha']],
+        head: [['#', 'Bloque', 'T. Nichos', 'Buenas', 'Malas', 'Manten.', 'Abandon.', 'Disponib.', 'Fecha']],
         body: detalles.map((d, index) => [
           index + 1,
-          d.codigo,
           d.nombre,
           d.total,
-          d.ocup,
-          d.disp,
+          d.bueno,
+          d.malo,
           d.mant,
+          d.abandonado,
+          d.disp,
           fechaCorta
         ]),
         theme: 'grid',
         headStyles: {
-          fillColor: [28, 42, 72], // #1c2a48
+          fillColor: [28, 42, 72],
           textColor: [255, 255, 255],
           halign: 'center',
-          fontSize: 8
+          fontSize: 7
         },
         bodyStyles: {
           textColor: [51, 51, 51],
           halign: 'center',
-          fontSize: 8
+          fontSize: 7
         },
         columnStyles: {
-          0: { fontStyle: 'bold', fillColor: [249, 249, 249], halign: 'center' }, // Índice
-          2: { halign: 'left' } // Nombre del bloque alineado a la izquierda (según formato de la Cédula/Nombre)
+          0: { fontStyle: 'bold', fillColor: [249, 249, 249], halign: 'center' },
+          1: { halign: 'left' }
         },
         alternateRowStyles: {
-          fillColor: [242, 242, 242] // #f2f2f2
+          fillColor: [242, 242, 242]
         },
         margin: { left: marginLeft, right: marginRight, top: marginTop, bottom: marginBottom }
       });
