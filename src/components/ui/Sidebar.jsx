@@ -210,6 +210,13 @@ const Sidebar = ({
     return () => window.removeEventListener('deseleccionarBloque', handler);
   }, []);
 
+  // Limpiar busqueda cuando se cambia el tipo (checkboxes)
+  useEffect(() => {
+    setBusqueda('');
+    setResultados([]);
+    setMensajeBusqueda(null);
+  }, [tipoBusqueda]);
+
   // --- FUNCIONES DEL BUSCADOR ---
   const manejarBusqueda = async (e) => {
     const texto = e.target.value;
@@ -723,8 +730,17 @@ const Sidebar = ({
             </div>
           </h3>
           <div className="input-group">
-            <input type="text" placeholder="Ingrese cédula o nombre" value={busqueda} onChange={manejarBusqueda} onKeyDown={(e) => e.key === 'Enter' && ubicarFallecido()} className="form-input" />
-            <button onClick={ubicarFallecido} disabled={busqueda.length < 3} className="btn-primary">
+            <input
+              type="text"
+              placeholder={!tipoBusqueda ? "Seleccione Difuntos o Socios para buscar" : "Ingrese cédula o nombre"}
+              value={busqueda}
+              onChange={manejarBusqueda}
+              onKeyDown={(e) => e.key === 'Enter' && ubicarFallecido()}
+              className="form-input"
+              disabled={!tipoBusqueda}
+              style={{ opacity: !tipoBusqueda ? 0.6 : 1, cursor: !tipoBusqueda ? 'not-allowed' : 'text' }}
+            />
+            <button onClick={ubicarFallecido} disabled={!tipoBusqueda || busqueda.length < 3} className="btn-primary">
               <Navigation size={16} />
             </button>
           </div>
