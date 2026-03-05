@@ -69,21 +69,27 @@ export const getDifuntosByNichoCodigo = async (codigo) => {
 
     if (!nichoRow) return [];
 
-    // PASO 2: Obtener nombre del responsable (socio) buscando en socio_nicho
-    let responsableNombre = 'No definido';
+    // PASO 2: Obtener nombre del responsable (socio)
+    let responsableNombre = 'N/A';
+    let targetSocioId = nichoRow.socio_id;
 
-    // Buscar en la tabla intermedia socio_nicho
-    const { data: snRows } = await supabase
-        .from('socio_nicho')
-        .select('socio_id')
-        .eq('nicho_id', nichoRow.id)
-        .limit(1);
+    // Si no está en el nicho directamente, buscar en la tabla intermedia socio_nicho como fallback
+    if (!targetSocioId) {
+        const { data: snRows } = await supabase
+            .from('socio_nicho')
+            .select('socio_id')
+            .eq('nicho_id', nichoRow.id)
+            .limit(1);
+        if (snRows && snRows.length > 0) {
+            targetSocioId = snRows[0].socio_id;
+        }
+    }
 
-    if (snRows && snRows.length > 0 && snRows[0].socio_id) {
+    if (targetSocioId) {
         const { data: socioRow } = await supabase
             .from('socios')
             .select('nombres, apellidos')
-            .eq('id', snRows[0].socio_id)
+            .eq('id', targetSocioId)
             .maybeSingle();
         if (socioRow) {
             responsableNombre = `${socioRow.nombres} ${socioRow.apellidos}`;
@@ -191,7 +197,7 @@ export const obtenerDatosCompletoNicho = async (props) => {
 
     // 4. Difuntos y Responsable
     const info = await getDifuntosByNichoCodigo(codigoRaw);
-    datosFinales.responsable = info?.responsable || 'No definido';
+    datosFinales.responsable = info?.responsable || 'N/A';
     datosFinales.difuntos = info?.difuntos || [];
 
     // Default

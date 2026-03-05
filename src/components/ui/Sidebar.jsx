@@ -305,7 +305,7 @@ const Sidebar = ({
       if (alActualizarPopupExterno) {
         let difuntos = [];
         if (item.tipo === 'Difunto') {
-          difuntos = [{ nombre: item.nombre, responsable: item.responsable || 'No definido' }];
+          difuntos = [{ nombre: item.nombre, responsable: item.responsable || 'N/A' }];
         } else if (item.tipo === 'Socio') {
           // Para socios: usar difuntosLista estructurada, con el socio como responsable
           difuntos = (item.difuntosLista || []);
