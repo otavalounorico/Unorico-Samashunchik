@@ -14,7 +14,6 @@ import { useNavegacionMapa } from '../../hooks/map/useNavegacionMapa';
 // Components
 import NichePopup from './components/PopupNicho';
 import BlockLabel from './components/EtiquetaBloque';
-import MapRotationControls from './components/ControlesRotacion';
 
 import './MapaCementerio.css';
 
@@ -174,21 +173,6 @@ const MapaCementerio = ({
       });
     }
   };
-
-  const handleRotateLeft = () => {
-    if (map) {
-      const view = map.getView();
-      view.animate({ rotation: view.getRotation() - Math.PI / 4, duration: 300 });
-    }
-  };
-
-  const handleRotateRight = () => {
-    if (map) {
-      const view = map.getView();
-      view.animate({ rotation: view.getRotation() + Math.PI / 4, duration: 300 });
-    }
-  };
-
   return (
     <div className="mapa-cementerio-container">
       {/* Notificaciones */}
@@ -212,11 +196,6 @@ const MapaCementerio = ({
         </div>,
         popupContainer
       )}
-
-      <MapRotationControls
-        onRotateLeft={handleRotateLeft}
-        onRotateRight={handleRotateRight}
-      />
 
       {!isInitialized && <div className="map-loader"><div className="spinner" /><p>Cargando mapa...</p></div>}
 
