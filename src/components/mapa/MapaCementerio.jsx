@@ -136,8 +136,8 @@ const MapaCementerio = ({
     onUpdatePopup: setDatosPopup,
     onUpdateBlockLabel: setEtiquetaBloque,
     onShowNotification: mostrarNotificacion,
-    popupOverlay: popupOverlayRef.current,
-    labelOverlay: labelOverlayRef.current,
+    popupOverlayRef,
+    labelOverlayRef,
     nichoExternoData,
     onNichoExternoUsado
   });

@@ -17,8 +17,8 @@ export const useNavegacionMapa = ({
     onUpdatePopup,
     onUpdateBlockLabel,
     onShowNotification,
-    popupOverlay,
-    labelOverlay,
+    popupOverlayRef,
+    labelOverlayRef,
     nichoExternoData,
     onNichoExternoUsado
 }) => {
@@ -71,8 +71,8 @@ export const useNavegacionMapa = ({
                 if (onUpdatePopup) onUpdatePopup(datosFinal);
 
                 // Position Overlay
-                if (popupOverlay) {
-                    popupOverlay.setPosition([(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2]);
+                if (popupOverlayRef && popupOverlayRef.current) {
+                    popupOverlayRef.current.setPosition([(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2]);
                 }
 
             } else {
@@ -118,8 +118,8 @@ export const useNavegacionMapa = ({
                                 }
                                 // Posicionar Popup y Label en el centro del bloque
                                 const centerB = [(extentB[0] + extentB[2]) / 2, (extentB[1] + extentB[3]) / 2];
-                                if (labelOverlay) labelOverlay.setPosition(centerB);
-                                if (popupOverlay) popupOverlay.setPosition(centerB);
+                                if (labelOverlayRef && labelOverlayRef.current) labelOverlayRef.current.setPosition(centerB);
+                                if (popupOverlayRef && popupOverlayRef.current) popupOverlayRef.current.setPosition(centerB);
                             }
                         }
                     } else {
@@ -176,15 +176,15 @@ export const useNavegacionMapa = ({
             sourceBloque?.clear();
             if (onUpdateBlockLabel) onUpdateBlockLabel(null);
             if (onUpdatePopup) onUpdatePopup(null);
-            if (popupOverlay) popupOverlay.setPosition(undefined);
-            if (labelOverlay) labelOverlay.setPosition(undefined);
+            if (popupOverlayRef && popupOverlayRef.current) popupOverlayRef.current.setPosition(undefined);
+            if (labelOverlayRef && labelOverlayRef.current) labelOverlayRef.current.setPosition(undefined);
             return;
         }
 
         // Limpiar sector al seleccionar bloque
         sourceSector?.clear();
         if (onUpdatePopup) onUpdatePopup(null);
-        if (popupOverlay) popupOverlay.setPosition(undefined);
+        if (popupOverlayRef && popupOverlayRef.current) popupOverlayRef.current.setPosition(undefined);
 
         const doZoomB = async () => {
             const data = await fetchWfsFeatures({
@@ -204,9 +204,9 @@ export const useNavegacionMapa = ({
                 if (onUpdateBlockLabel) {
                     onUpdateBlockLabel(bloqueSeleccionado.nombre || bloqueSeleccionado.codigo);
                 }
-                if (labelOverlay) {
+                if (labelOverlayRef && labelOverlayRef.current) {
                     const center = [(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2];
-                    labelOverlay.setPosition(center);
+                    labelOverlayRef.current.setPosition(center);
                 }
             }
         };
@@ -228,8 +228,8 @@ export const useNavegacionMapa = ({
             });
 
             // Asegurar que se limpien los overlays
-            if (popupOverlay) popupOverlay.setPosition(undefined);
-            if (labelOverlay) labelOverlay.setPosition(undefined);
+            if (popupOverlayRef && popupOverlayRef.current) popupOverlayRef.current.setPosition(undefined);
+            if (labelOverlayRef && labelOverlayRef.current) labelOverlayRef.current.setPosition(undefined);
         }
-    }, [nichoSeleccionado, bloqueSeleccionado, sectorSeleccionado, isInitialized, map]);
+    }, [nichoSeleccionado, bloqueSeleccionado, sectorSeleccionado, isInitialized, map, popupOverlayRef, labelOverlayRef]);
 };
