@@ -41,9 +41,10 @@ export const usePintadoMapa = (map, isInitialized, estadosVisibles, sourceEstado
                 if (resNichos) {
                     const filtrados = resNichos.filter(n => {
                         const est = n.estado?.toLowerCase();
+                        if (estadosVisibles.includes('Estado_Bueno') && est === 'bueno') return true;
+                        if (estadosVisibles.includes('Estado_Malo') && est === 'malo') return true;
                         if (estadosVisibles.includes('Mantenimiento') && est === 'mantenimiento') return true;
-                        if (estadosVisibles.includes('Estado_Bueno') && est === 'ocupado' && n.disponible === true) return true;
-                        if (estadosVisibles.includes('Estado_Malo') && est === 'ocupado' && n.disponible === false) return true;
+                        if (estadosVisibles.includes('Abandonado') && est === 'abandonado') return true;
                         return false;
                     });
                     listaFinal = [...listaFinal, ...filtrados];
@@ -74,10 +75,10 @@ export const usePintadoMapa = (map, isInitialized, estadosVisibles, sourceEstado
                         if (d) {
                             let colorKey = '';
                             if (d.estado === 'DISPONIBLE') colorKey = 'disponible';
+                            else if (d.estado?.toLowerCase() === 'bueno') colorKey = 'ocupado';
+                            else if (d.estado?.toLowerCase() === 'malo') colorKey = 'malas';
                             else if (d.estado?.toLowerCase() === 'mantenimiento') colorKey = 'mantenimiento';
-                            else if (d.estado?.toLowerCase() === 'ocupado') {
-                                colorKey = d.disponible ? 'ocupado' : 'malas';
-                            }
+                            else if (d.estado?.toLowerCase() === 'abandonado') colorKey = 'abandonado';
                             if (colorKey) f.set('estado', colorKey);
                         }
                     });

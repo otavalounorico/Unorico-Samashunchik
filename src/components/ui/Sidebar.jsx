@@ -95,7 +95,7 @@ const Sidebar = ({
       // "Si selecciono ocupado me permita seleccionar los 3". Si quito ocupado, deberían quitarse los 3?
       // Generalmente sí, para no quedar con "Malas condiciones" pero sin "Ocupado".
       if (valor === 'Ocupado') {
-        nuevos = nuevos.filter(e => !['Estado_Bueno', 'Estado_Malo', 'Mantenimiento'].includes(e));
+        nuevos = nuevos.filter(e => !['Estado_Bueno', 'Estado_Malo', 'Mantenimiento', 'Abandonado'].includes(e));
       }
       // Si quito Disponible, no hay dependientes que limpiar.
     }
@@ -103,8 +103,8 @@ const Sidebar = ({
   };
 
   const toggleEstadoFisico = (valor) => {
-    // Grupo Inferior: Estado_Bueno / Estado_Malo / Mantenimiento. Exclusivo entre ellos.
-    const grupoFisico = ['Estado_Bueno', 'Estado_Malo', 'Mantenimiento'];
+    // Grupo Inferior: Estado_Bueno / Estado_Malo / Mantenimiento / Abandonado. Exclusivo entre ellos.
+    const grupoFisico = ['Estado_Bueno', 'Estado_Malo', 'Mantenimiento', 'Abandonado'];
 
     // 1. Quitar otros del grupo fisico (EXCLUSIVIDAD - "solo uno a la vez")
     let nuevos = estadosSeleccionados.filter(e => !grupoFisico.includes(e));
@@ -869,6 +869,18 @@ const Sidebar = ({
               </div>
               <input type="checkbox" checked={estadosSeleccionados.includes('Mantenimiento')} onChange={() => toggleEstadoFisico('Mantenimiento')} className="hidden-checkbox" disabled={!estadosSeleccionados.includes('Ocupado')} />
               <span className="status-text">Mantenimiento</span>
+            </label>
+
+            <label className={`status-item ${estadosSeleccionados.includes('Abandonado') ? 'active' : ''}`}
+              style={{
+                opacity: estadosSeleccionados.includes('Ocupado') ? 1 : 0.5,
+                pointerEvents: estadosSeleccionados.includes('Ocupado') ? 'auto' : 'none'
+              }}>
+              <div className="status-color-box" style={{ width: '24px', height: '24px', borderRadius: '6px', border: '2px solid #9333ea', backgroundColor: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {estadosSeleccionados.includes('Abandonado') && <div style={{ width: '14px', height: '14px', backgroundColor: '#9333ea', borderRadius: '2px' }} />}
+              </div>
+              <input type="checkbox" checked={estadosSeleccionados.includes('Abandonado')} onChange={() => toggleEstadoFisico('Abandonado')} className="hidden-checkbox" disabled={!estadosSeleccionados.includes('Ocupado')} />
+              <span className="status-text">Abandonado</span>
             </label>
           </div>
         </section>

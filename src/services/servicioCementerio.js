@@ -148,11 +148,10 @@ export const getNichosByEstadosList = async (estadosVisibles) => {
     if (!estadosVisibles || estadosVisibles.length === 0) return { data: [] };
 
     let filtrosOR = [];
-    if (estadosVisibles.includes('Estado_Bueno')) filtrosOR.push(`estado.ilike.ocupado`);
-    if (estadosVisibles.includes('Estado_Malo')) {
-        if (!filtrosOR.includes(`estado.ilike.ocupado`)) filtrosOR.push(`estado.ilike.ocupado`);
-    }
-    if (estadosVisibles.includes('Mantenimiento')) filtrosOR.push(`estado.ilike.mantenimiento`);
+    if (estadosVisibles.includes('Estado_Bueno')) filtrosOR.push(`estado.ilike.BUENO`);
+    if (estadosVisibles.includes('Estado_Malo')) filtrosOR.push(`estado.ilike.MALO`);
+    if (estadosVisibles.includes('Mantenimiento')) filtrosOR.push(`estado.ilike.MANTENIMIENTO`);
+    if (estadosVisibles.includes('Abandonado')) filtrosOR.push(`estado.ilike.ABANDONADO`);
 
     if (filtrosOR.length === 0) return { data: [] };
 

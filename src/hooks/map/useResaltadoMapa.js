@@ -45,7 +45,8 @@ export const useResaltadoMapa = (map, isInitialized) => {
                 mantenimiento: { stroke: '#fbbf24', fill: 'rgba(251, 191, 36, 0.7)' },
                 reservado: { stroke: '#fbbf24', fill: 'rgba(251, 191, 36, 0.7)' },
                 malas: { stroke: '#991b1b', fill: 'rgba(153, 27, 27, 0.8)' },
-                malo: { stroke: '#991b1b', fill: 'rgba(153, 27, 27, 0.8)' }
+                malo: { stroke: '#991b1b', fill: 'rgba(153, 27, 27, 0.8)' },
+                abandonado: { stroke: '#9333ea', fill: 'rgba(147, 51, 234, 0.7)' }
             };
             const c = colors[est] || { stroke: '#94a3b8', fill: 'rgba(148, 163, 184, 0.2)' };
             return new Style({
