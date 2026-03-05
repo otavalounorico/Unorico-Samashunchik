@@ -50,29 +50,47 @@ export const getNichoEstadoAdmin = async (codigo) => {
 export const getDifuntosByNichoCodigo = async (codigo) => {
     if (!codigo) return [];
 
-    // 1. Buscar ID del nicho en tabla administrativa
-    let { data: nAdmin, error: errN } = await supabase.from('nichos').select('id').eq('codigo', codigo).maybeSingle();
+    // 1. Buscar ID del nicho + socio responsable (titular del nicho)
+    let { data: nAdmin, error: errN } = await supabase
+        .from('nichos')
+        .select('id, socios(nombres, apellidos)')
+        .eq('codigo', codigo)
+        .maybeSingle();
 
     if (!nAdmin) {
-        const { data: nLike } = await supabase.from('nichos').select('id').ilike('codigo', codigo).limit(1);
+        const { data: nLike } = await supabase
+            .from('nichos')
+            .select('id, socios(nombres, apellidos)')
+            .ilike('codigo', codigo)
+            .limit(1);
         if (nLike && nLike.length > 0) nAdmin = nLike[0];
     }
 
     if (!nAdmin) return [];
 
+    const responsableNombre = nAdmin.socios
+        ? `${nAdmin.socios.nombres} ${nAdmin.socios.apellidos}`
+        : 'No definido';
+
+    // 2. Buscar difuntos asociados a este nicho (sin filtrar por fecha_exhumacion)
     const { data: rel, error: errRel } = await supabase
         .from('fallecido_nicho')
-        .select(`fallecidos (nombres, apellidos, fecha_fallecimiento), socios (nombres, apellidos)`)
+        .select(`fallecidos (nombres, apellidos, fecha_fallecimiento)`)
         .eq('nicho_id', nAdmin.id)
-        .is('fecha_exhumacion', null)
         .order('created_at', { ascending: false });
 
     if (errRel) {
         console.error("Error buscando difuntos:", errRel);
         return [];
     }
-    return rel || [];
+
+    // 3. Mapear difuntos con el responsable del nicho
+    return (rel || []).map(d => ({
+        nombre: d.fallecidos ? `${d.fallecidos.nombres} ${d.fallecidos.apellidos}` : 'Desconocido',
+        responsable: responsableNombre
+    }));
 };
+
 
 /**
  * Orquestador principal para obtener toda la info de un nicho
@@ -122,16 +140,9 @@ export const obtenerDatosCompletoNicho = async (props) => {
         datosFinales.estado = estadoData.estado;
     }
 
-    // 4. Difuntos
+    // 4. Difuntos (ya vienen mapeados con { nombre, responsable })
     const difuntosRaw = await getDifuntosByNichoCodigo(codigoRaw);
-    if (difuntosRaw && difuntosRaw.length > 0) {
-        datosFinales.difuntos = difuntosRaw.map(d => ({
-            nombre: `${d.fallecidos.nombres} ${d.fallecidos.apellidos}`,
-            responsable: d.socios ? `${d.socios.nombres} ${d.socios.apellidos}` : 'No definido'
-        }));
-    } else {
-        datosFinales.difuntos = [];
-    }
+    datosFinales.difuntos = difuntosRaw || [];
 
     // Default
     if (!datosFinales.estado) {
