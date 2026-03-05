@@ -12,7 +12,7 @@ const NichePopup = ({ datos, onClose }) => {
         <div className="map-popup" style={{ display: 'block' }}>
             <div className="popup-header">
                 <span className="popup-icon">📍</span>
-                <h4 className="popup-title">Nicho {datos.codigo || '-'}</h4>
+                <h4 className="popup-title">Ubicación aproximada</h4>
                 <button onClick={cerrarNichoPopup} className="popup-close">×</button>
             </div>
             <div className="popup-content">
@@ -25,7 +25,7 @@ const NichePopup = ({ datos, onClose }) => {
                 <div className="popup-grid">
                     <div className="info-card">
                         <span className="info-label">Bloque</span>
-                        <span className="info-value">{datos.bloque || 'N/A'}</span>
+                        <span className="info-value">{datos.bloque || 'N/A'} - {datos.codigo ? `Nicho ${datos.codigo}` : ''}</span>
                     </div>
                     <div className="info-card">
                         <span className="info-label">Sector</span>
