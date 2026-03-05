@@ -87,13 +87,7 @@ export const useNavegacionMapa = ({
                         const nombreBloque = adminData.bloques.nombre;
                         const codigoBloque = adminData.bloques.codigo; // Asumiendo que 'codigo' es el link
 
-                        // Notificar al usuario
-                        if (onShowNotification) {
-                            onShowNotification({
-                                tipo: 'warning',
-                                texto: `Ubicación aproximada en ${nombreBloque}`
-                            });
-                        }
+                        // Notificación temporal removida a petición del usuario.
 
                         // Obtener datos completos para el popup (aunque no haya geometría)
                         const datosCompletos = await obtenerDatosCompletoNicho({ codigo });
