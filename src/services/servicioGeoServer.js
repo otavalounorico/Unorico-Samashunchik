@@ -29,7 +29,7 @@ export const getSafeWfsUrl = (url) => {
     if (!url) return null;
     // Si la URL generada por OL ya empieza con nuestra GEOSERVER_URL, no hacemos nada.
     if (!url.startsWith(GEOSERVER_BASE_URL)) {
-        return url.replace(/http:\/\/localhost:8080\/geoserver\/otavalo_cementerio/gi, GEOSERVER_BASE_URL);
+        return url.replace(/http:\/\/(localhost|127\.0\.0\.1):8080\/geoserver\/otavalo_cementerio/gi, GEOSERVER_BASE_URL);
     }
     return url;
 };
