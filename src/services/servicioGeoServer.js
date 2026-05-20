@@ -2,10 +2,8 @@
  * Servicio para interactuar con GeoServer (WMS/WFS)
  */
 
-// CONFIGURACIÓN
-// Si reinicias el túnel, SOLO CAMBIA ESTA LÍNEA con el nuevo enlace:
-//const GEOSERVER_BASE_URL = 'https://mi-geoserver.onrender.com/geoserver/otavalo_cementerio';
-const GEOSERVER_BASE_URL = 'http://localhost:8080/geoserver/otavalo_cementerio';
+// CONFIGURACIÓN DINÁMICA POR VARIABLES DE ENTORNO (.env)
+const GEOSERVER_BASE_URL = import.meta.env.VITE_GEOSERVER_URL || 'http://localhost:8080/geoserver/otavalo_cementerio';
 
 export const getGeoServerUrl = () => GEOSERVER_BASE_URL;
 
