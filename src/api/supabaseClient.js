@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 // Variables de entorno o constantes centralizadas
-const supabaseUrl = 'https://fndxvondeencofreglxy.supabase.co';
-const supabaseAnonKey = 'sb_publishable_o-IInwEPRi2YdzRyTQkveA_czDtA-j4';
+const supabaseUrl = 'https://xoeiqbouzlbftwhsgasm.supabase.co';
+const supabaseAnonKey = 'sb_publishable_GeLC7wl3aHdykd5iLgbgSw_EpPnhZFT';
 
 if (!supabaseUrl || !supabaseAnonKey) {
     console.error('Faltan las variables de entorno de Supabase');
